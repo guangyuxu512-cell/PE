@@ -1,0 +1,19 @@
+/* 用途：定义顶部工具栏样式。 */
+.bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); flex-shrink: 0; }
+.bar .el-button {
+  --el-button-bg-color: rgba(255, 255, 255, 0.15);
+  --el-button-text-color: #fff;
+  --el-button-border-color: rgba(255, 255, 255, 0.3);
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.25);
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.5);
+}
+.bar .el-button--primary {
+  --el-button-bg-color: rgba(255, 255, 255, 0.92);
+  --el-button-text-color: #5b47b7;
+  --el-button-border-color: transparent;
+  --el-button-hover-bg-color: #fff;
+  --el-button-hover-text-color: #4456cc;
+}
+.bar .el-divider { --el-border-color: rgba(255, 255, 255, 0.3); }
+.bar .sp { flex: 1; }

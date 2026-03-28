@@ -1,0 +1,18 @@
+/* 用途：定义存储桶图片页和图片选择对话框样式。 */
+.gallery-wrap { display: flex; flex-direction: column; gap: 16px; }
+.gallery-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.gallery-toolbar__group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gallery-toolbar__stats { color: #606266; font-size: 13px; }
+.gallery-toolbar .sp { flex: 1; min-width: 12px; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.gallery-card { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); border: 1px solid #ebeef5; }
+.gallery-card__image { display: flex; align-items: center; justify-content: center; height: 180px; background: linear-gradient(180deg, #f7f9ff 0%, #eef2ff 100%); cursor: pointer; }
+.gallery-card__body { padding: 12px; }
+.gallery-card__title { font-size: 13px; font-weight: 600; color: #303133; line-height: 1.5; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gallery-card__meta { display: flex; justify-content: space-between; color: #909399; font-size: 12px; margin-bottom: 10px; }
+.gallery-card__actions { display: flex; justify-content: space-between; gap: 8px; }
+.gallery-empty { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); padding: 24px; }
+.gallery-count-tag { margin-left: 4px; }
+.table-url { display: flex; align-items: center; gap: 8px; }
+.table-url__text { flex: 1; min-width: 0; color: #409eff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cos-picker__tip { color: #909399; font-size: 12px; margin-bottom: 8px; }

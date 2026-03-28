@@ -1,46 +1,76 @@
-import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX = ROOT / "index.html"
 
 
-def read_index() -> str:
-    return INDEX.read_text(encoding="utf-8")
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_index_contains_required_tabs_and_settings_fields():
-    html = read_index()
+def test_renderer_index_is_minimal_shell():
+    html = read("renderer/index.html")
 
-    assert 'name="cos-gallery"' in html
-    assert 'name="settings"' in html
-    assert html.index('name="detail"') < html.index('name="cos-gallery"') < html.index('name="json"')
-    assert html.index('name="json"') < html.index('name="settings"')
+    assert '<div id="app"></div>' in html
+    assert '<script type="module" src="./app.js"></script>' in html
+    assert "element-plus/dist/index.css" in html
+    assert "./styles/main.css" in html
+    assert "./styles/toolbar.css" in html
+    assert "./styles/settings.css" in html
+    assert "./styles/gallery.css" in html
+
+
+def test_renderer_modules_and_components_exist():
+    for path in [
+        "renderer/app.js",
+        "renderer/constants.js",
+        "renderer/composables/useProductData.js",
+        "renderer/composables/useConfig.js",
+        "renderer/composables/useGallery.js",
+        "renderer/composables/useLogger.js",
+        "renderer/composables/useAi.js",
+        "renderer/components/TabBasicInfo.js",
+        "renderer/components/TabPics.js",
+        "renderer/components/TabSkus.js",
+        "renderer/components/TabProps.js",
+        "renderer/components/TabDetail.js",
+        "renderer/components/TabGallery.js",
+        "renderer/components/TabJson.js",
+        "renderer/components/TabSettings.js",
+        "renderer/components/shared/ImageProxy.js",
+        "renderer/components/shared/LogPanel.js",
+    ]:
+        assert (ROOT / path).exists(), path
+
+
+def test_app_and_components_include_required_features():
+    app_js = read("renderer/app.js")
+    detail_js = read("renderer/components/TabDetail.js")
+    basic_js = read("renderer/components/TabBasicInfo.js")
+    props_js = read("renderer/components/TabProps.js")
+    image_proxy_js = read("renderer/components/shared/ImageProxy.js")
 
     for marker in [
-        "cfg.ai_temperature",
-        "cfg.ai_max_tokens",
-        "testAiConnection",
-        "testCosConnection",
-        "saveCfg",
-        "gallery.view",
-        "deleteSelectedCos",
-        "addSelectedCosPics",
-        "copyUrl",
-        "openCfg",
+        "app.component('tab-basic-info'",
+        "app.component('tab-detail'",
+        "app.component('tab-gallery'",
+        "app.component('tab-settings'",
+        'name="cos-gallery"',
+        'name="settings"',
+        "AI 批量生成",
     ]:
-        assert marker in html
+        assert marker in app_js
 
-    assert "cfgDlg" not in html
+    for marker in [
+        "图片列表模式",
+        "HTML 源码模式",
+        "从存储桶选择",
+        "AI 生成详情",
+        "updateDetailSource",
+        "applyDetailBlocks",
+    ]:
+        assert marker in detail_js
 
-
-def test_index_inline_script_is_valid_javascript():
-    script = """
-const fs = require('fs');
-const html = fs.readFileSync('index.html', 'utf8');
-const match = html.match(/<script>\\n([\\s\\S]*)<\\/script>\\n<\\/body>/);
-if (!match) throw new Error('inline script not found');
-new Function(match[1]);
-"""
-    subprocess.run(["node", "-e", script], cwd=ROOT, check=True)
+    assert "AI 优化" in basic_js
+    assert "AI 补全属性" in props_js
+    assert "window.api.proxyImage" in image_proxy_js

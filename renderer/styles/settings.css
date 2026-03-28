@@ -1,0 +1,12 @@
+/* 用途：定义系统设置页样式。 */
+.settings-page { display: flex; flex-direction: column; gap: 16px; }
+.settings-grid { display: grid; gap: 16px; }
+.settings-card .el-card__header { padding: 16px 20px; }
+.settings-card .el-card__body { padding: 20px; }
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-head__title { display: flex; flex-direction: column; gap: 4px; }
+.settings-head__title strong { font-size: 15px; }
+.settings-head__title span { color: #909399; font-size: 12px; }
+.settings-actions { display: flex; justify-content: flex-end; }
+.settings-actions .el-button { min-width: 140px; }
+.slider-row { width: 100%; padding-right: 12px; }

@@ -1,0 +1,34 @@
+/* 用途：定义渲染层全局布局、卡片和表单公共样式。 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #app { height: 100%; width: 100%; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #303133; }
+.wrap { display: flex; flex-direction: column; height: 100vh; width: 100%; }
+.main-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.main-tabs > .el-tabs__header { margin: 0; padding: 0 16px; background: #fff; flex-shrink: 0; overflow-x: auto; }
+.main-tabs > .el-tabs__content { flex: 1; min-height: 0; overflow: auto; }
+.main-tabs .el-tab-pane { width: 100%; }
+.main-tabs .el-tabs__nav-wrap::after { display: none; }
+.tscr { padding: 16px; width: 100%; }
+.card { background: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.card-t { font-weight: 600; font-size: 14px; color: #303133; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #ebeef5; }
+.bb { margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.logs { border-top: 1px solid #e4e7ed; background: #fafbfc; padding: 6px 16px; height: 100px; overflow-y: auto; flex-shrink: 0; }
+.logs .l { font: 12px/1.8 Consolas, monospace; color: #606266; }
+.jbox { font: 13px/1.5 Consolas, monospace; width: 100%; border: 1px solid #dcdfe6; border-radius: 4px; padding: 10px; resize: none; outline: none; }
+.jbox:focus { border-color: #409eff; }
+.el-table { border-radius: 8px; width: 100% !important; }
+.el-table .cell { color: #303133 !important; }
+.form-inline-action { display: flex; gap: 8px; align-items: center; }
+.preview-dialog img { max-width: 100%; max-height: 72vh; display: block; margin: 0 auto; }
+.detail-list { display: flex; flex-direction: column; gap: 14px; }
+.detail-item { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; padding: 14px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+.detail-item__actions { display: flex; flex-direction: column; gap: 8px; }
+.detail-item__preview { width: 140px; height: 140px; border-radius: 10px; overflow: hidden; background: #f7f8fa; }
+.proxy-image { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #f7f8fa; color: #909399; font-size: 12px; }
+.proxy-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.proxy-image--error { color: #f56c6c; }
+@media (max-width: 960px) {
+  .detail-item { grid-template-columns: 1fr; }
+  .detail-item__preview { width: 100%; height: 220px; }
+  .detail-item__actions { flex-direction: row; flex-wrap: wrap; }
+}
