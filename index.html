@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>商品发布编辑器</title>
+<link rel="stylesheet" href="./node_modules/element-plus/dist/index.css">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body, #app { height:100%; width:100%; }
+body { font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif; background:#f0f2f5; color:#303133; }
+.wrap { display:flex; flex-direction:column; height:100vh; width:100%; }
+.bar { display:flex; align-items:center; gap:8px; padding:8px 16px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); flex-shrink:0; }
+.bar .el-button { --el-button-bg-color:rgba(255,255,255,.15); --el-button-text-color:#fff;
+  --el-button-border-color:rgba(255,255,255,.3); --el-button-hover-bg-color:rgba(255,255,255,.25);
+  --el-button-hover-text-color:#fff; --el-button-hover-border-color:rgba(255,255,255,.5); }
+.bar .el-button--primary { --el-button-bg-color:rgba(255,255,255,.9); --el-button-text-color:#764ba2;
+  --el-button-border-color:transparent; --el-button-hover-bg-color:#fff;
+  --el-button-hover-text-color:#667eea; }
+.bar .el-divider { --el-border-color:rgba(255,255,255,.3); }
+.bar .sp { flex:1; }
+.main-tabs { flex:1; min-height:0; margin:0; display:flex; flex-direction:column; }
+.main-tabs > .el-tabs__header { padding:0 16px; background:#fff; flex-shrink:0; }
+.main-tabs > .el-tabs__content { flex:1; min-height:0; overflow:auto; }
+.main-tabs .el-tab-pane { width:100%; }
+.tscr { padding:16px; width:100%; }
+.card { background:#fff; border-radius:8px; padding:16px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+.card-t { font-weight:600; font-size:14px; color:#303133; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #ebeef5; }
+.logs { border-top:1px solid #e4e7ed; background:#fafbfc; padding:6px 16px; height:100px; overflow-y:auto; flex-shrink:0; }
+.logs .l { font:12px/1.8 Consolas,monospace; color:#606266; }
+.jbox { font:13px/1.5 Consolas,monospace; width:100%; border:1px solid #dcdfe6; border-radius:4px; padding:10px; resize:none; outline:none; }
+.jbox:focus { border-color:#409eff; }
+.bb { margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.el-table { border-radius:8px; width:100% !important; }
+.el-table .cell { color:#303133 !important; }
+</style>
+</head>
+<body>
+<div id="app">
+<div class="wrap">
+
+  <!-- ===== 顶部工具栏 ===== -->
+  <header class="bar">
+    <el-button @click="newBlank">📄 新建空白</el-button>
+    <el-button @click="importFile">📂 导入文件</el-button>
+    <el-button @click="exportFile">💾 导出文件</el-button>
+    <el-divider direction="vertical"/>
+    <el-button @click="loadFromJson">🔄 从JSON加载</el-button>
+    <el-button @click="syncToJson">📋 同步到JSON</el-button>
+    <el-divider direction="vertical"/>
+    <el-button type="primary" @click="aiDlg.show=true">🤖 AI批量生成</el-button>
+    <span class="sp"></span>
+    <el-button @click="openCfg">⚙️ 设置</el-button>
+  </header>
+
+  <!-- ===== 标签页 ===== -->
+  <el-tabs v-model="tab" type="border-card" class="main-tabs" @tab-change="onTab">
+
+    <!-- Tab 1: 基本信息 -->
+    <el-tab-pane label="📝 基本信息" name="basic"><div class="tscr">
+      <div v-for="g in FG" :key="g.name" class="card">
+        <div class="card-t" v-text="g.name"></div>
+        <el-form label-width="100px">
+          <el-row :gutter="20">
+            <el-col :span="12" v-for="f in g.fields" :key="f.key">
+              <el-form-item :label="f.label" style="margin-bottom:10px">
+                <el-input v-model="info[f.key]" size="default"/>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+      </div>
+      <el-button type="primary" @click="saveInfo" size="large">💾 保存基本信息到数据</el-button>
+    </div></el-tab-pane>
+
+    <!-- Tab 2: 商品图片 -->
+    <el-tab-pane label="🖼️ 商品图片" name="pics"><div class="tscr">
+      <div class="bb">
+        <el-button type="primary" plain @click="picAdd">➕ 新增</el-button>
+        <el-button :disabled="picI<0" @click="picEdit">✏️ 编辑</el-button>
+        <el-button :disabled="picI<0" type="danger" plain @click="picDel">🗑️ 删除</el-button>
+        <el-divider direction="vertical"/>
+        <el-button @click="cosUp">📤 上传到COS</el-button>
+        <el-button @click="cosBrowse">📋 浏览COS</el-button>
+      </div>
+      <el-table :data="picList" highlight-current-row @current-change="r=>picI=r?r._i:-1"
+        @row-dblclick="picEdit" border stripe style="width:100%">
+        <el-table-column prop="PicIndex" label="序号" width="70" align="center"/>
+        <el-table-column prop="Url" label="图片链接" show-overflow-tooltip/>
+        <el-table-column prop="LocalPath" label="本地路径" width="200" show-overflow-tooltip/>
+        <el-table-column prop="Keys" label="Keys" width="100"/>
+        <el-table-column label="预览" width="80" align="center">
+          <template #default="{row}">
+            <img v-if="row.Url" :src="row.Url" referrerpolicy="no-referrer"
+              style="height:36px;border-radius:4px" @error="e=>e.target.style.display='none'"/>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div></el-tab-pane>
+
+    <!-- Tab 3: SKU 管理 -->
+    <el-tab-pane label="📦 SKU管理" name="skus"><div class="tscr">
+      <div class="bb">
+        <el-button type="primary" plain @click="skuAdd">➕ 新增</el-button>
+        <el-button :disabled="skuI<0" @click="skuEdit">✏️ 编辑</el-button>
+        <el-button :disabled="skuI<0" type="danger" plain @click="skuDel">🗑️ 删除</el-button>
+      </div>
+      <el-table :data="skuList" highlight-current-row @current-change="r=>skuI=r?r._i:-1"
+        @row-dblclick="skuEdit" border stripe style="width:100%">
+        <el-table-column prop="sn" label="规格名" width="90"/>
+        <el-table-column prop="sv" label="规格值" width="180" show-overflow-tooltip/>
+        <el-table-column prop="SkuId" label="SkuId" width="120"/>
+        <el-table-column prop="Price" label="价格" width="70" align="right"/>
+        <el-table-column prop="PromotionPrice" label="促销价" width="70" align="right"/>
+        <el-table-column prop="CouponPrice" label="券后价" width="70" align="right"/>
+        <el-table-column prop="Num" label="库存" width="60" align="right"/>
+        <el-table-column prop="SkuCode" label="编码" width="100" show-overflow-tooltip/>
+        <el-table-column prop="Barcode" label="条码" width="100" show-overflow-tooltip/>
+      </el-table>
+    </div></el-tab-pane>
+
+    <!-- Tab 4: 商品属性 -->
+    <el-tab-pane label="🏷️ 商品属性" name="props"><div class="tscr">
+      <div class="bb">
+        <el-button type="primary" plain @click="prAdd">➕ 新增</el-button>
+        <el-button :disabled="prI<0" @click="prEdit">✏️ 编辑</el-button>
+        <el-button :disabled="prI<0" type="danger" plain @click="prDel">🗑️ 删除</el-button>
+      </div>
+      <el-table :data="prList" highlight-current-row @current-change="r=>prI=r?r._i:-1"
+        @row-dblclick="prEdit" border stripe style="width:100%">
+        <el-table-column prop="Name" label="属性名" width="120"/>
+        <el-table-column prop="Value" label="属性值" width="200" show-overflow-tooltip/>
+        <el-table-column label="销售属性" width="80" align="center">
+          <template #default="{row}">
+            <el-tag :type="row.IsSellPro==1?'success':'info'" size="small"
+              v-text="row.IsSellPro==1?'是':'否'"></el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="PicUrl" label="图片链接" show-overflow-tooltip/>
+        <el-table-column prop="Aliasname" label="别名" width="100"/>
+      </el-table>
+    </div></el-tab-pane>
+
+    <!-- Tab 5: 商品详情 -->
+    <el-tab-pane label="📄 商品详情" name="detail"><div class="tscr"
+      style="display:flex;flex-direction:column;height:100%">
+      <p style="margin-bottom:8px;color:#909399;font-size:13px">PC 端商品详情 HTML 源码</p>
+      <textarea class="jbox" v-model="html" style="flex:1"></textarea>
+    </div></el-tab-pane>
+
+    <!-- Tab 6: JSON -->
+    <el-tab-pane label="{ } JSON" name="json"><div class="tscr"
+      style="display:flex;flex-direction:column;height:100%">
+      <textarea class="jbox" v-model="json" style="flex:1"></textarea>
+    </div></el-tab-pane>
+
+  </el-tabs>
+
+  <!-- ===== 操作日志 ===== -->
+  <div class="logs" ref="logEl">
+    <div v-for="l in logs" :key="l.id" class="l" v-text="'['+l.t+'] '+l.s"></div>
+  </div>
+</div>
+
+<!-- ========== 弹窗 ========== -->
+
+<!-- 设置 -->
+<el-dialog v-model="cfgDlg" title="⚙️ 设置" width="560" :close-on-click-modal="false">
+  <el-form label-width="120px">
+    <el-divider content-position="left">腾讯云 COS</el-divider>
+    <el-form-item label="SecretId"><el-input v-model="cfg.cos_secret_id" type="password" show-password/></el-form-item>
+    <el-form-item label="SecretKey"><el-input v-model="cfg.cos_secret_key" type="password" show-password/></el-form-item>
+    <el-form-item label="Bucket"><el-input v-model="cfg.cos_bucket"/></el-form-item>
+    <el-form-item label="Region"><el-input v-model="cfg.cos_region"/></el-form-item>
+    <el-form-item label="路径前缀"><el-input v-model="cfg.cos_prefix" placeholder="可选，如 images/product"/></el-form-item>
+    <el-divider content-position="left">AI API（OpenAI 格式）</el-divider>
+    <el-form-item label="Base URL"><el-input v-model="cfg.ai_base_url"/></el-form-item>
+    <el-form-item label="API Key"><el-input v-model="cfg.ai_api_key" type="password" show-password/></el-form-item>
+    <el-form-item label="模型"><el-input v-model="cfg.ai_model"/></el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="cfgDlg=false">取消</el-button>
+    <el-button type="primary" @click="saveCfg">保存</el-button>
+  </template>
+</el-dialog>
+
+<!-- 主图表单 -->
+<el-dialog v-model="pf.show" :title="pf.mode==='add'?'新增主图':'编辑主图'" width="520">
+  <el-form label-width="100px">
+    <el-form-item label="图片链接"><el-input v-model="pf.d.Url"/></el-form-item>
+    <el-form-item label="本地路径"><el-input v-model="pf.d.LocalPath"/></el-form-item>
+    <el-form-item label="Keys"><el-input v-model="pf.d.Keys"/></el-form-item>
+    <el-form-item label="图片序号"><el-input v-model="pf.d.PicIndex"/></el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="pf.show=false">取消</el-button>
+    <el-button type="primary" @click="picSave">保存</el-button>
+  </template>
+</el-dialog>
+
+<!-- SKU 表单 -->
+<el-dialog v-model="sf.show" :title="sf.mode==='add'?'新增 SKU':'编辑 SKU'" width="560">
+  <el-form label-width="100px">
+    <el-form-item label="规格名"><el-input v-model="sf.d.sn"/></el-form-item>
+    <el-form-item label="规格值"><el-input v-model="sf.d.sv"/></el-form-item>
+    <el-form-item label="SKU编号"><el-input v-model="sf.d.SkuId"/></el-form-item>
+    <el-row :gutter="12">
+      <el-col :span="8"><el-form-item label="价格" label-width="50px">
+        <el-input v-model.number="sf.d.Price"/></el-form-item></el-col>
+      <el-col :span="8"><el-form-item label="促销价" label-width="60px">
+        <el-input v-model.number="sf.d.PromotionPrice"/></el-form-item></el-col>
+      <el-col :span="8"><el-form-item label="券后价" label-width="60px">
+        <el-input v-model.number="sf.d.CouponPrice"/></el-form-item></el-col>
+    </el-row>
+    <el-form-item label="库存"><el-input v-model.number="sf.d.Num"/></el-form-item>
+    <el-form-item label="SKU编码"><el-input v-model="sf.d.SkuCode"/></el-form-item>
+    <el-form-item label="条码"><el-input v-model="sf.d.Barcode"/></el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="sf.show=false">取消</el-button>
+    <el-button type="primary" @click="skuSave">保存</el-button>
+  </template>
+</el-dialog>
+
+<!-- 属性表单 -->
+<el-dialog v-model="rf.show" :title="rf.mode==='add'?'新增属性':'编辑属性'" width="520">
+  <el-form label-width="110px">
+    <el-form-item label="属性名"><el-input v-model="rf.d.Name"/></el-form-item>
+    <el-form-item label="属性值"><el-input v-model="rf.d.Value"/></el-form-item>
+    <el-form-item label="销售属性">
+      <el-select v-model="rf.d.IsSellPro" style="width:100%">
+        <el-option :value="0" label="否"/><el-option :value="1" label="是"/>
+      </el-select>
+    </el-form-item>
+    <el-form-item label="图片链接"><el-input v-model="rf.d.PicUrl"/></el-form-item>
+    <el-form-item label="别名"><el-input v-model="rf.d.Aliasname"/></el-form-item>
+    <el-form-item label="PropertyName"><el-input v-model="rf.d.PropertyName"/></el-form-item>
+    <el-form-item label="PropertyKey"><el-input v-model="rf.d.PropertyKey"/></el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="rf.show=false">取消</el-button>
+    <el-button type="primary" @click="prSave">保存</el-button>
+  </template>
+</el-dialog>
+
+<!-- AI 批量生成 -->
+<el-dialog v-model="aiDlg.show" title="🤖 AI 批量生成" width="500">
+  <el-form label-width="90px">
+    <el-form-item label="生成套数">
+      <el-input-number v-model="aiDlg.n" :min="1" :max="50"/>
+    </el-form-item>
+    <el-form-item label="导出目录">
+      <el-input v-model="aiDlg.dir" placeholder="选择一个导出目录">
+        <template #append><el-button @click="pickAiDir">选择</el-button></template>
+      </el-input>
+    </el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="aiDlg.show=false">取消</el-button>
+    <el-button type="primary" :loading="aiDlg.busy" @click="runAi">开始生成</el-button>
+  </template>
+</el-dialog>
+
+<!-- COS 图片浏览 -->
+<el-dialog v-model="cosDlg.show" title="📋 COS 图片列表" width="820">
+  <el-table :data="cosDlg.list" @selection-change="r=>cosDlg.sel=r" border max-height="380">
+    <el-table-column type="selection" width="45"/>
+    <el-table-column prop="name" label="文件名" width="220" show-overflow-tooltip/>
+    <el-table-column prop="url" label="URL" show-overflow-tooltip/>
+    <el-table-column label="大小" width="90" align="right">
+      <template #default="{row}"><span v-text="(row.size/1024).toFixed(1)+' KB'"></span></template>
+    </el-table-column>
+  </el-table>
+  <template #footer>
+    <el-button @click="cosDlg.show=false">取消</el-button>
+    <el-button type="primary" :disabled="!cosDlg.sel.length" @click="cosAddPics"
+      v-text="'选择并添加为主图 ('+cosDlg.sel.length+')'">
+    </el-button>
+  </template>
+</el-dialog>
+
+</div>
+
+<script src="./node_modules/vue/dist/vue.global.prod.js"></script>
+<script src="./node_modules/element-plus/dist/index.full.min.js"></script>
+<script>
+const { createApp, ref, reactive, computed, nextTick, toRaw } = Vue
+const clone = o => JSON.parse(JSON.stringify(o))
+const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
+
+// ==================== 空白商品模板 ====================
+const TMPL = {
+  FromItem: {
+    SysId:1, ItemKey:'', ItemName:'', ItemUrl:'',
+    ItemPrice:0, PromotionPrice:0, CouponPrice:null, ItemPicUrl:'',
+    SortId:0, SortName:'', SortPath:'',
+    Province:'', ProvinceName:'', City:'', CityName:'',
+    Nums:0, FreeShipping:0, OuterCode:null, Barcode:null,
+    Sellpoint:null, Weight:null, Size:null,
+    IsReturn:null, IsTicket:null, IsRepair:null, SubStock:null, OnSell:1,
+    ArticleNumber:null, QualificationCode:null, IndustrialCode:null,
+    SellerAccount:null, IsConsign:null, SellNums:0,
+    ShortTitle:null, SellingPoint:null, ItemRemark:null, Details:null,
+    PurchaseLimit:null, LimitCount:0,
+    WhiteBaseImageUrl:null, TransparentImageUrl:null,
+    RefundRule:null, MainVideoUrl:null,
+  },
+  FromContent: { PcDesc: '' },
+  FromPics: [], FromProperties: [], FromSkus: [],
+}
+
+// ==================== 字段分组 ====================
+const FG = [
+  { name: '商品基础', fields: [
+    { key:'ItemName',    label:'商品标题' }, { key:'ShortTitle',   label:'短标题'   },
+    { key:'ItemUrl',     label:'商品链接' }, { key:'ItemKey',      label:'商品ID'   },
+    { key:'ItemPicUrl',  label:'主图链接' }, { key:'MainVideoUrl', label:'主图视频' },
+  ]},
+  { name: '价格与库存', fields: [
+    { key:'ItemPrice',      label:'价格'     }, { key:'PromotionPrice', label:'促销价'   },
+    { key:'CouponPrice',    label:'券后价'   }, { key:'Nums',           label:'总库存'   },
+    { key:'LimitCount',     label:'限购数量' }, { key:'PurchaseLimit',  label:'限购说明' },
+  ]},
+  { name: '分类信息', fields: [
+    { key:'SortId',   label:'类目ID'   },
+    { key:'SortName', label:'类目名称' },
+    { key:'SortPath', label:'类目路径' },
+  ]},
+  { name: '发货地', fields: [
+    { key:'Province',     label:'省份代码' }, { key:'ProvinceName', label:'省份名称' },
+    { key:'City',         label:'城市代码' }, { key:'CityName',     label:'城市名称' },
+  ]},
+]
+
+const NUMS = new Set([
+  'SysId','ItemPrice','PromotionPrice','CouponPrice','SortId',
+  'Nums','FreeShipping','OnSell','SellNums','LimitCount',
+])
+
+// ==================== Vue 应用 ====================
+const app = createApp({
+  setup() {
+    // ---- 核心状态 ----
+    const tab = ref('basic')
+    const D = ref(null)
+    const logs = ref([])
+    const logEl = ref(null)
+    let lid = 0
+
+    const info = reactive({})
+    const html = ref('')
+    const json = ref('')
+
+    // ---- 弹窗状态 ----
+    const cfgDlg = ref(false)
+    const cfg = reactive({
+      cos_secret_id:'', cos_secret_key:'',
+      cos_bucket:'gy0005-1378040963', cos_region:'ap-guangzhou', cos_prefix:'',
+      ai_base_url:'https://api.openai.com/v1', ai_api_key:'', ai_model:'gpt-3.5-turbo',
+    })
+    const picI = ref(-1), skuI = ref(-1), prI = ref(-1)
+    const pf = reactive({
+      show:false, mode:'add', idx:-1,
+      d: { Url:'', LocalPath:'', Keys:'', PicIndex:'0' },
+    })
+    const sf = reactive({
+      show:false, mode:'add', idx:-1,
+      d: { sn:'', sv:'', SkuId:'', Price:0, PromotionPrice:0, CouponPrice:0, Num:0, SkuCode:'', Barcode:'' },
+    })
+    const rf = reactive({
+      show:false, mode:'add', idx:-1,
+      d: { Name:'', Value:'', IsSellPro:0, PicUrl:'', Aliasname:'', PropertyName:'', PropertyKey:'' },
+    })
+    const aiDlg = reactive({ show:false, n:10, dir:'', busy:false })
+    const cosDlg = reactive({ show:false, list:[], sel:[] })
+
+    // ---- 计算属性 ----
+    const picList = computed(() =>
+      D.value ? (D.value.FromPics || []).map((p, i) => ({ ...p, _i: i })) : [])
+    const skuList = computed(() => {
+      if (!D.value) return []
+      return (D.value.FromSkus || []).map((s, i) => {
+        const sp = (s.Specs || [])[0] || { SpecName: '', SpecValue: '' }
+        return {
+          _i: i, sn: sp.SpecName, sv: sp.SpecValue,
+          SkuId: s.SkuId || '', Price: s.Price, PromotionPrice: s.PromotionPrice,
+          CouponPrice: s.CouponPrice, Num: s.Num,
+          SkuCode: s.SkuCode || '', Barcode: s.Barcode || '',
+        }
+      })
+    })
+    const prList = computed(() =>
+      D.value ? (D.value.FromProperties || []).map((p, i) => ({ ...p, _i: i })) : [])
+
+    // ---- 日志 ----
+    function log(s) {
+      logs.value.push({ id: ++lid, t: now(), s })
+      nextTick(() => { if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight })
+    }
+
+    // ---- 初始化：读取配置 ----
+    window.api.cfgLoad().then(c => Object.assign(cfg, c))
+
+    // ---- 数据同步 ----
+    function ensure(d) {
+      d.FromItem = d.FromItem || {}
+      d.FromContent = d.FromContent || {}
+      d.FromPics = d.FromPics || []
+      d.FromProperties = d.FromProperties || []
+      d.FromSkus = d.FromSkus || []
+    }
+
+    function toUi() {
+      if (!D.value) return
+      const it = D.value.FromItem || {}
+      for (const g of FG)
+        for (const f of g.fields)
+          info[f.key] = it[f.key] == null ? '' : String(it[f.key])
+      html.value = (D.value.FromContent || {}).PcDesc || ''
+      json.value = JSON.stringify(D.value, null, 4)
+      picI.value = -1; skuI.value = -1; prI.value = -1
+    }
+
+    function fromUi() {
+      if (!D.value) return
+      const it = D.value.FromItem
+      for (const g of FG)
+        for (const f of g.fields) {
+          const v = (info[f.key] || '').trim()
+          if (v === '') it[f.key] = f.key === 'SysId' ? 1 : null
+          else if (NUMS.has(f.key)) { const n = Number(v); it[f.key] = isNaN(n) ? v : n }
+          else it[f.key] = v
+        }
+      D.value.FromContent.PcDesc = html.value
+    }
+
+    function rj() { if (D.value) json.value = JSON.stringify(D.value, null, 4) }
+
+    // ---- 工具栏 ----
+    function newBlank() { D.value = clone(TMPL); toUi(); log('已新建空白商品') }
+
+    async function importFile() {
+      const r = await window.api.openFile()
+      if (!r) return
+      try {
+        const t = r.content.replace(/^\uFEFF/, ''), i = t.indexOf('{')
+        if (i < 0) throw new Error('未找到 JSON 对象')
+        D.value = JSON.parse(t.substring(i))
+        ensure(D.value); toUi()
+        log('已导入: ' + r.path)
+      } catch (e) { ElementPlus.ElMessage.error('导入失败: ' + e.message) }
+    }
+
+    async function exportFile() {
+      if (!D.value) return ElementPlus.ElMessage.warning('请先加载数据')
+      fromUi(); rj()
+      const p = await window.api.saveFile(json.value)
+      if (p) log('已导出: ' + p)
+    }
+
+    function loadFromJson() {
+      const t = json.value.trim()
+      if (!t) return ElementPlus.ElMessage.warning('JSON 文本框为空')
+      try {
+        D.value = JSON.parse(t); ensure(D.value); toUi()
+        log('已从 JSON 标签页加载')
+      } catch (e) { ElementPlus.ElMessage.error('解析失败: ' + e.message) }
+    }
+
+    function syncToJson() {
+      if (!D.value) return
+      fromUi(); rj(); log('已同步到 JSON 标签页')
+    }
+
+    function onTab(n) { if (n === 'json' && D.value) { fromUi(); rj() } }
+
+    function saveInfo() {
+      if (!D.value) return
+      fromUi(); rj()
+      log('已保存基本信息')
+      ElementPlus.ElMessage.success('已保存')
+    }
+
+    // ---- 主图 CRUD ----
+    function picAdd() {
+      if (!D.value) return
+      Object.assign(pf, {
+        show: true, mode: 'add', idx: -1,
+        d: { Url: '', LocalPath: '', Keys: '', PicIndex: String((D.value.FromPics || []).length) },
+      })
+    }
+
+    function picEdit() {
+      if (picI.value < 0 || !D.value) return
+      const p = D.value.FromPics[picI.value]
+      Object.assign(pf, {
+        show: true, mode: 'edit', idx: picI.value,
+        d: {
+          Url: p.Url || '', LocalPath: p.LocalPath || '',
+          Keys: p.Keys || '', PicIndex: String(p.PicIndex ?? picI.value),
+        },
+      })
+    }
+
+    function picSave() {
+      const rec = {
+        LocalPath: pf.d.LocalPath || null, Url: pf.d.Url || '',
+        Keys: pf.d.Keys || null, PicIndex: pf.d.PicIndex ? Number(pf.d.PicIndex) : 0,
+      }
+      if (pf.mode === 'add') { D.value.FromPics.push(rec); log('已新增主图') }
+      else { D.value.FromPics[pf.idx] = rec; log('已编辑主图 [' + pf.idx + ']') }
+      pf.show = false; rj()
+    }
+
+    async function picDel() {
+      if (picI.value < 0) return
+      try { await ElementPlus.ElMessageBox.confirm('确认删除第 ' + picI.value + ' 张主图？', '删除确认') }
+      catch { return }
+      D.value.FromPics.splice(picI.value, 1)
+      picI.value = -1; rj(); log('已删除主图')
+    }
+
+    // ---- SKU 辅助 ----
+    function defSpec() {
+      if (!D.value) return '颜色分类'
+      for (const p of D.value.FromProperties || [])
+        if (p.IsSellPro == 1 && p.Name) return p.Name.trim()
+      for (const s of D.value.FromSkus || []) {
+        const sp = (s.Specs || [])[0]
+        if (sp && sp.SpecName) return sp.SpecName
+      }
+      return '颜色分类'
+    }
+
+    function syncSell() {
+      const non = (D.value.FromProperties || []).filter(p => p.IsSellPro != 1)
+      const old = {}
+      for (const p of D.value.FromProperties || [])
+        if (p.IsSellPro == 1) old[p.Name + '|' + p.Value] = clone(p)
+      const sale = [], seen = new Set()
+      for (const sku of D.value.FromSkus || []) {
+        for (const sp of sku.Specs || []) {
+          const k = sp.SpecName + '|' + sp.SpecValue
+          if (seen.has(k)) continue; seen.add(k)
+          const o = old[k] || {}
+          sale.push({
+            SysId: o.SysId || (D.value.FromItem || {}).SysId || 1,
+            PropertyName: o.PropertyName || null,
+            Name: sp.SpecName, Value: sp.SpecValue,
+            PropertyKey: o.PropertyKey || null, IsSellPro: 1,
+            Aliasname: o.Aliasname || null,
+            PicUrl: o.PicUrl || (D.value.FromItem || {}).ItemPicUrl || null,
+            Index: o.Index || null,
+          })
+        }
+      }
+      D.value.FromProperties = [...non, ...sale]
+    }
+
+    // ---- SKU CRUD ----
+    function skuAdd() {
+      if (!D.value) return
+      Object.assign(sf, {
+        show: true, mode: 'add', idx: -1,
+        d: { sn: defSpec(), sv: '', SkuId: '', Price: 0, PromotionPrice: 0, CouponPrice: 0, Num: 0, SkuCode: '', Barcode: '' },
+      })
+    }
+
+    function skuEdit() {
+      if (skuI.value < 0 || !D.value) return
+      const s = D.value.FromSkus[skuI.value]
+      const sp = (s.Specs || [])[0] || { SpecName: '', SpecValue: '' }
+      Object.assign(sf, {
+        show: true, mode: 'edit', idx: skuI.value,
+        d: {
+          sn: sp.SpecName, sv: sp.SpecValue, SkuId: s.SkuId || '',
+          Price: s.Price || 0, PromotionPrice: s.PromotionPrice || 0,
+          CouponPrice: s.CouponPrice || 0, Num: s.Num || 0,
+          SkuCode: s.SkuCode || '', Barcode: s.Barcode || '',
+        },
+      })
+    }
+
+    function skuSave() {
+      const d = sf.d
+      if (!(d.sv || '').trim()) return ElementPlus.ElMessage.warning('规格值不能为空')
+      const sid = (D.value.FromItem || {}).SysId || 1
+      const rec = {
+        SysId: sid, SkuCode: d.SkuCode || null, Barcode: d.Barcode || null,
+        SkuInfo: d.sn + ':' + d.sv, SkuInfoShort: d.sv,
+        Price: Number(d.Price) || 0, PromotionPrice: Number(d.PromotionPrice) || 0,
+        CouponPrice: Number(d.CouponPrice) || 0, Num: Number(d.Num) || 0,
+        SkuId: d.SkuId || '', Specs: [{ SpecName: d.sn, SpecValue: d.sv }],
+      }
+      if (sf.mode === 'add') { D.value.FromSkus.push(rec); log('已新增 SKU: ' + d.sv) }
+      else { D.value.FromSkus[sf.idx] = rec; log('已编辑 SKU: ' + d.sv) }
+      syncSell(); sf.show = false; rj()
+    }
+
+    async function skuDel() {
+      if (skuI.value < 0) return
+      const sv = ((D.value.FromSkus[skuI.value].Specs || [])[0] || {}).SpecValue || ''
+      try { await ElementPlus.ElMessageBox.confirm('确认删除 SKU: ' + sv + '？', '删除确认') }
+      catch { return }
+      D.value.FromSkus.splice(skuI.value, 1)
+      syncSell(); skuI.value = -1; rj(); log('已删除 SKU: ' + sv)
+    }
+
+    // ---- 属性 CRUD ----
+    function prAdd() {
+      if (!D.value) return
+      Object.assign(rf, {
+        show: true, mode: 'add', idx: -1,
+        d: { Name: '', Value: '', IsSellPro: 0, PicUrl: '', Aliasname: '', PropertyName: '', PropertyKey: '' },
+      })
+    }
+
+    function prEdit() {
+      if (prI.value < 0 || !D.value) return
+      const p = D.value.FromProperties[prI.value]
+      Object.assign(rf, {
+        show: true, mode: 'edit', idx: prI.value,
+        d: {
+          Name: p.Name || '', Value: p.Value || '', IsSellPro: p.IsSellPro || 0,
+          PicUrl: p.PicUrl || '', Aliasname: p.Aliasname || '',
+          PropertyName: p.PropertyName || '', PropertyKey: p.PropertyKey || '',
+        },
+      })
+    }
+
+    function prSave() {
+      const d = rf.d, sid = (D.value.FromItem || {}).SysId || 1
+      const rec = {
+        SysId: sid, PropertyName: d.PropertyName || null,
+        Name: d.Name, Value: d.Value, PropertyKey: d.PropertyKey || null,
+        IsSellPro: Number(d.IsSellPro) || 0,
+        Aliasname: d.Aliasname || null, PicUrl: d.PicUrl || null, Index: null,
+      }
+      if (rf.mode === 'add') {
+        D.value.FromProperties.push(rec)
+        log('已新增属性: ' + d.Name + '=' + d.Value)
+      } else {
+        D.value.FromProperties[rf.idx] = rec
+        log('已编辑属性 [' + rf.idx + ']')
+      }
+      rf.show = false; rj()
+    }
+
+    async function prDel() {
+      if (prI.value < 0) return
+      const p = D.value.FromProperties[prI.value]
+      try { await ElementPlus.ElMessageBox.confirm('确认删除属性: ' + p.Name + '=' + p.Value + '？', '删除确认') }
+      catch { return }
+      D.value.FromProperties.splice(prI.value, 1)
+      prI.value = -1; rj(); log('已删除属性')
+    }
+
+    // ---- 设置 ----
+    async function openCfg() {
+      const c = await window.api.cfgLoad()
+      Object.assign(cfg, {
+        cos_secret_id: '', cos_secret_key: '',
+        cos_bucket: 'gy0005-1378040963', cos_region: 'ap-guangzhou', cos_prefix: '',
+        ai_base_url: 'https://api.openai.com/v1', ai_api_key: '', ai_model: 'gpt-3.5-turbo',
+        ...c,
+      })
+      cfgDlg.value = true
+    }
+
+    async function saveCfg() {
+      await window.api.cfgSave(JSON.parse(JSON.stringify(cfg)))
+      cfgDlg.value = false
+      log('设置已保存')
+      ElementPlus.ElMessage.success('已保存')
+    }
+
+    // ---- COS ----
+    async function cosUp() {
+      const files = await window.api.pickImages()
+      if (!files.length) return
+      if (!cfg.cos_secret_id || !cfg.cos_secret_key || !cfg.cos_bucket)
+        return ElementPlus.ElMessage.error('请先在设置中配置 COS 凭证')
+      log('正在上传 ' + files.length + ' 张图片...')
+      try {
+        const res = await window.api.cosUpload({ files, cfg: JSON.parse(JSON.stringify(cfg)) })
+        const urls = []
+        for (const r of res) {
+          if (r.ok) { log('已上传: ' + r.name + ' → ' + r.url); urls.push(r.url) }
+          else log('上传失败: ' + r.name + ' - ' + r.err)
+        }
+        if (urls.length && D.value) {
+          try {
+            await ElementPlus.ElMessageBox.confirm(
+              '已成功上传 ' + urls.length + ' 张图片，是否添加为商品主图？', '上传完成')
+            for (const u of urls)
+              D.value.FromPics.push({ LocalPath: null, Url: u, Keys: null, PicIndex: D.value.FromPics.length })
+            rj(); log('已添加 ' + urls.length + ' 张主图')
+          } catch {}
+        }
+      } catch (e) { ElementPlus.ElMessage.error('上传出错: ' + e.message) }
+    }
+
+    async function cosBrowse() {
+      if (!cfg.cos_secret_id || !cfg.cos_secret_key || !cfg.cos_bucket)
+        return ElementPlus.ElMessage.error('请先在设置中配置 COS 凭证')
+      try {
+        cosDlg.list = await window.api.cosList(JSON.parse(JSON.stringify(cfg)))
+        cosDlg.sel = []; cosDlg.show = true
+        if (!cosDlg.list.length) ElementPlus.ElMessage.info('COS 中未找到图片文件')
+      } catch (e) { ElementPlus.ElMessage.error('读取失败: ' + e.message) }
+    }
+
+    function cosAddPics() {
+      if (!D.value) return
+      for (const img of cosDlg.sel)
+        D.value.FromPics.push({ LocalPath: null, Url: img.url, Keys: null, PicIndex: D.value.FromPics.length })
+      rj(); log('已从 COS 添加 ' + cosDlg.sel.length + ' 张主图')
+      cosDlg.show = false
+    }
+
+    // ---- AI 批量生成 ----
+    async function pickAiDir() {
+      const d = await window.api.pickDir()
+      if (d) aiDlg.dir = d
+    }
+
+    async function runAi() {
+      if (!D.value) return
+      if (!cfg.ai_base_url || !cfg.ai_api_key)
+        return ElementPlus.ElMessage.error('请先在设置中配置 AI API 凭证')
+      fromUi()
+      const title = (D.value.FromItem || {}).ItemName || ''
+      if (!title) return ElementPlus.ElMessage.warning('请先填写商品标题')
+      if (!aiDlg.dir) return ElementPlus.ElMessage.warning('请选择导出目录')
+
+      const skuNames = (D.value.FromSkus || [])
+        .map(s => ((s.Specs || [])[0] || {}).SpecValue || '').filter(Boolean)
+
+      aiDlg.busy = true
+      log('正在调用 AI 生成 ' + aiDlg.n + ' 套商品数据...')
+
+      try {
+        const skuText = skuNames.length ? skuNames.map(s => '- ' + s).join('\n') : '（无SKU）'
+        const prompt = '你是一个电商运营专家。请基于以下商品信息，'
+          + '生成' + aiDlg.n + '套不同的标题和SKU名称变体。\n\n'
+          + '原标题: ' + title + '\n原SKU列表:\n' + skuText + '\n\n'
+          + '要求:\n1. 每套标题自然、吸引人，包含核心关键词但措辞不同\n'
+          + '2. SKU名称与原SKU一一对应，数量保持一致（' + skuNames.length + '个）\n'
+          + '3. 每套之间有明显差异\n\n'
+          + '以JSON数组返回: [{"标题":"...","SKU":["..."]}]\n只返回JSON，不要其他内容。'
+
+        const text = await window.api.aiGen({ cfg: JSON.parse(JSON.stringify(cfg)), prompt })
+        const si = text.indexOf('['), ei = text.lastIndexOf(']') + 1
+        if (si < 0 || ei <= si) throw new Error('AI 返回格式不正确')
+        const items = JSON.parse(text.substring(si, ei))
+
+        const files = items.map((item, i) => {
+          const data = clone(toRaw(D.value))
+          data.FromItem.ItemName = item['标题'] || title
+          const ns = item['SKU'] || []
+          for (let j = 0; j < (data.FromSkus || []).length; j++) {
+            if (j < ns.length) {
+              const sku = data.FromSkus[j]
+              const ov = ((sku.Specs || [])[0] || {}).SpecValue || ''
+              if (sku.Specs && sku.Specs[0]) sku.Specs[0].SpecValue = ns[j]
+              sku.SkuInfo = ((sku.Specs || [])[0] || {}).SpecName + ':' + ns[j]
+              sku.SkuInfoShort = ns[j]
+              for (const pr of data.FromProperties || [])
+                if (pr.IsSellPro == 1 && pr.Value === ov) pr.Value = ns[j]
+            }
+          }
+          return {
+            name: '商品_' + String(i + 1).padStart(2, '0') + '.txt',
+            content: JSON.stringify(data, null, 4),
+          }
+        })
+
+        const cnt = await window.api.batchExport({ dir: aiDlg.dir, files })
+        log('AI 批量生成完成: ' + cnt + ' 套已导出到 ' + aiDlg.dir)
+        ElementPlus.ElMessage.success('已生成 ' + cnt + ' 套商品数据')
+        aiDlg.show = false
+      } catch (e) {
+        ElementPlus.ElMessage.error('生成失败: ' + e.message)
+        log('AI 生成失败: ' + e.message)
+      }
+      aiDlg.busy = false
+    }
+
+    // ---- 导出 ----
+    return {
+      tab, D, logs, logEl, info, html, json, FG, cfg, cfgDlg,
+      picI, skuI, prI, picList, skuList, prList,
+      pf, sf, rf, aiDlg, cosDlg,
+      newBlank, importFile, exportFile, loadFromJson, syncToJson, onTab, saveInfo,
+      picAdd, picEdit, picSave, picDel,
+      skuAdd, skuEdit, skuSave, skuDel,
+      prAdd, prEdit, prSave, prDel,
+      openCfg, saveCfg,
+      cosUp, cosBrowse, cosAddPics,
+      pickAiDir, runAi,
+    }
+  },
+})
+
+app.use(ElementPlus)
+app.mount('#app')
+</script>
+</body>
+</html>
