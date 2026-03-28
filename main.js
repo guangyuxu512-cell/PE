@@ -1,18 +1,134 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const os = require('os')
+const dotenv = require('dotenv')
 
-// ---- 配置管理 ----
-const CFG_PATH = path.join(os.homedir(), '.商品编辑器配置.json')
-const readCfg = () => { try { return JSON.parse(fs.readFileSync(CFG_PATH, 'utf-8')) } catch { return {} } }
-const writeCfg = c => fs.writeFileSync(CFG_PATH, JSON.stringify(c, null, 2), 'utf-8')
+const ENV_KEY_MAP = {
+  cos_secret_id: 'COS_SECRET_ID',
+  cos_secret_key: 'COS_SECRET_KEY',
+  cos_bucket: 'COS_BUCKET',
+  cos_region: 'COS_REGION',
+  cos_prefix: 'COS_PREFIX',
+  ai_base_url: 'AI_BASE_URL',
+  ai_api_key: 'AI_API_KEY',
+  ai_model: 'AI_MODEL',
+  ai_temperature: 'AI_TEMPERATURE',
+  ai_max_tokens: 'AI_MAX_TOKENS',
+}
+
+const NUMBER_KEYS = new Set(['ai_temperature', 'ai_max_tokens'])
+
+const CFG_PATH = path.join(app.isPackaged ? app.getAppPath() : __dirname, '.env')
+
+function loadEnvFile() {
+  if (fs.existsSync(CFG_PATH)) {
+    dotenv.config({ path: CFG_PATH, override: true })
+  }
+}
+
+function parseCfgValue(key, value) {
+  if (value == null) return undefined
+  if (NUMBER_KEYS.has(key)) {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : undefined
+  }
+  return String(value)
+}
+
+function formatEnvValue(value) {
+  const text = value == null ? '' : String(value)
+  if (text === '') return ''
+  if (/[\s#="'\\\r\n]/.test(text)) {
+    return `"${text
+      .replace(/\\/g, '\\\\')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/"/g, '\\"')}"`
+  }
+  return text
+}
+
+function readCfg() {
+  if (!fs.existsSync(CFG_PATH)) return {}
+  const parsed = dotenv.parse(fs.readFileSync(CFG_PATH, 'utf-8'))
+  const cfg = {}
+  for (const [cfgKey, envKey] of Object.entries(ENV_KEY_MAP)) {
+    if (!Object.prototype.hasOwnProperty.call(parsed, envKey)) continue
+    const value = parseCfgValue(cfgKey, parsed[envKey])
+    if (value !== undefined) cfg[cfgKey] = value
+  }
+  return cfg
+}
+
+function writeCfg(cfg) {
+  const lines = []
+  for (const [cfgKey, envKey] of Object.entries(ENV_KEY_MAP)) {
+    lines.push(`${envKey}=${formatEnvValue(cfg[cfgKey])}`)
+  }
+  fs.writeFileSync(CFG_PATH, `${lines.join('\n')}\n`, 'utf-8')
+  loadEnvFile()
+}
+
+function createCosClient(cfg) {
+  const COS = require('cos-nodejs-sdk-v5')
+  return new COS({
+    SecretId: cfg.cos_secret_id,
+    SecretKey: cfg.cos_secret_key,
+  })
+}
+
+function getCosOptions(cfg) {
+  return {
+    Bucket: cfg.cos_bucket,
+    Region: cfg.cos_region || 'ap-guangzhou',
+    Prefix: cfg.cos_prefix || '',
+  }
+}
+
+function getCosDomain(cfg) {
+  const { Bucket, Region } = getCosOptions(cfg)
+  return `https://${Bucket}.cos.${Region}.myqcloud.com`
+}
+
+function getAiClient(cfg) {
+  const { OpenAI } = require('openai')
+  return new OpenAI({
+    baseURL: cfg.ai_base_url || 'https://api.openai.com/v1',
+    apiKey: cfg.ai_api_key,
+  })
+}
+
+async function listCosImages(cfg, maxKeys = 500) {
+  const cos = createCosClient(cfg)
+  const { Bucket, Region, Prefix } = getCosOptions(cfg)
+  const domain = getCosDomain(cfg)
+  return new Promise((resolve, reject) => {
+    cos.getBucket({ Bucket, Region, Prefix, MaxKeys: maxKeys }, (err, data) => {
+      if (err) return reject(err)
+      const items = (data.Contents || [])
+        .filter(item => /\.(jpe?g|png|gif|webp|bmp)$/i.test(item.Key))
+        .map(item => ({
+          key: item.Key,
+          name: item.Key.split('/').pop(),
+          url: `${domain}/${item.Key}`,
+          size: Number(item.Size) || 0,
+          lastModified: item.LastModified || '',
+        }))
+      resolve(items)
+    })
+  })
+}
+
+loadEnvFile()
 
 let win
 
 app.whenReady().then(() => {
   win = new BrowserWindow({
-    width: 1400, height: 920, minWidth: 1100, minHeight: 750,
+    width: 1400,
+    height: 920,
+    minWidth: 1100,
+    minHeight: 750,
     title: '商品发布编辑器',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -21,111 +137,143 @@ app.whenReady().then(() => {
       webSecurity: false,
     },
   })
+
   Menu.setApplicationMenu(null)
   win.loadFile('index.html')
 })
 
 app.on('window-all-closed', () => app.quit())
 
-// ---- 文件对话框 ----
 ipcMain.handle('open-file', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const result = await dialog.showOpenDialog(win, {
     filters: [
       { name: 'JSON / TXT', extensions: ['txt', 'json'] },
       { name: '所有文件', extensions: ['*'] },
     ],
   })
-  if (r.canceled || !r.filePaths.length) return null
-  return { path: r.filePaths[0], content: fs.readFileSync(r.filePaths[0], 'utf-8') }
+  if (result.canceled || !result.filePaths.length) return null
+  const filePath = result.filePaths[0]
+  return { path: filePath, content: fs.readFileSync(filePath, 'utf-8') }
 })
 
 ipcMain.handle('save-file', async (_, text) => {
-  const r = await dialog.showSaveDialog(win, {
+  const result = await dialog.showSaveDialog(win, {
     defaultPath: '商品数据.txt',
     filters: [
       { name: 'TXT', extensions: ['txt'] },
       { name: 'JSON', extensions: ['json'] },
     ],
   })
-  if (r.canceled) return null
-  fs.writeFileSync(r.filePath, text, 'utf-8')
-  return r.filePath
+  if (result.canceled) return null
+  fs.writeFileSync(result.filePath, text, 'utf-8')
+  return result.filePath
 })
 
 ipcMain.handle('pick-images', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const result = await dialog.showOpenDialog(win, {
     properties: ['openFile', 'multiSelections'],
     filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] }],
   })
-  return r.canceled ? [] : r.filePaths
+  return result.canceled ? [] : result.filePaths
 })
 
 ipcMain.handle('pick-dir', async () => {
-  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
-  return r.canceled ? null : r.filePaths[0]
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  return result.canceled ? null : result.filePaths[0]
 })
 
-// ---- 配置 ----
-ipcMain.handle('cfg-load', () => readCfg())
-ipcMain.handle('cfg-save', (_, c) => { writeCfg(c); return true })
+ipcMain.handle('copy-text', (_, text) => {
+  clipboard.writeText(text || '')
+  return true
+})
 
-// ---- 腾讯云 COS ----
+ipcMain.handle('cfg-load', () => readCfg())
+
+ipcMain.handle('cfg-save', (_, cfg) => {
+  writeCfg(cfg)
+  return true
+})
+
 ipcMain.handle('cos-upload', async (_, { files, cfg }) => {
-  const COS = require('cos-nodejs-sdk-v5')
-  const cos = new COS({ SecretId: cfg.cos_secret_id, SecretKey: cfg.cos_secret_key })
-  const bkt = cfg.cos_bucket, rgn = cfg.cos_region || 'ap-guangzhou'
-  const pfx = cfg.cos_prefix || ''
-  const dom = 'https://' + bkt + '.cos.' + rgn + '.myqcloud.com'
-  const out = []
-  for (const fp of files) {
-    const name = path.basename(fp)
-    const key = (pfx ? pfx + '/' : '') + Date.now() + '_' + name
+  const cos = createCosClient(cfg)
+  const { Bucket, Region, Prefix } = getCosOptions(cfg)
+  const domain = getCosDomain(cfg)
+  const results = []
+
+  for (const filePath of files) {
+    const name = path.basename(filePath)
+    const key = `${Prefix ? `${Prefix}/` : ''}${Date.now()}_${name}`
     try {
-      await new Promise((ok, no) =>
-        cos.uploadFile({ Bucket: bkt, Region: rgn, Key: key, FilePath: fp },
-          (e, d) => e ? no(e) : ok(d)))
-      out.push({ ok: true, url: dom + '/' + key, name })
-    } catch (e) {
-      out.push({ ok: false, name, err: e.message })
+      await new Promise((resolve, reject) => {
+        cos.uploadFile({ Bucket, Region, Key: key, FilePath: filePath }, err => (err ? reject(err) : resolve()))
+      })
+      results.push({ ok: true, key, name, url: `${domain}/${key}` })
+    } catch (err) {
+      results.push({ ok: false, key, name, err: err.message })
     }
   }
-  return out
+
+  return results
 })
 
-ipcMain.handle('cos-list', async (_, cfg) => {
-  const COS = require('cos-nodejs-sdk-v5')
-  const cos = new COS({ SecretId: cfg.cos_secret_id, SecretKey: cfg.cos_secret_key })
-  const bkt = cfg.cos_bucket, rgn = cfg.cos_region || 'ap-guangzhou'
-  const pfx = cfg.cos_prefix || ''
-  const dom = 'https://' + bkt + '.cos.' + rgn + '.myqcloud.com'
-  return new Promise((ok, no) => {
-    cos.getBucket({ Bucket: bkt, Region: rgn, Prefix: pfx, MaxKeys: 200 }, (e, d) => {
-      if (e) return no(e)
-      ok((d.Contents || [])
-        .filter(i => /\.(jpe?g|png|gif|webp|bmp)$/i.test(i.Key))
-        .map(i => ({ key: i.Key, url: dom + '/' + i.Key, size: i.Size, name: i.Key.split('/').pop() })))
-    })
-  })
+ipcMain.handle('cos-list', async (_, cfg) => listCosImages(cfg))
+
+ipcMain.handle('cos-test', async (_, cfg) => {
+  const items = await listCosImages(cfg, 1)
+  return { ok: true, count: items.length }
 })
 
-// ---- AI ----
+ipcMain.handle('cos-delete', async (_, { keys, cfg }) => {
+  const cos = createCosClient(cfg)
+  const { Bucket, Region } = getCosOptions(cfg)
+  const results = []
+
+  for (const key of keys || []) {
+    try {
+      await new Promise((resolve, reject) => {
+        cos.deleteObject({ Bucket, Region, Key: key }, err => (err ? reject(err) : resolve()))
+      })
+      results.push({ ok: true, key })
+    } catch (err) {
+      results.push({ ok: false, key, err: err.message })
+    }
+  }
+
+  return results
+})
+
 ipcMain.handle('ai-gen', async (_, { cfg, prompt }) => {
-  const { OpenAI } = require('openai')
-  const client = new OpenAI({ baseURL: cfg.ai_base_url, apiKey: cfg.ai_api_key })
-  const r = await client.chat.completions.create({
+  const client = getAiClient(cfg)
+  const response = await client.chat.completions.create({
     model: cfg.ai_model || 'gpt-3.5-turbo',
     messages: [{ role: 'user', content: prompt }],
-    temperature: 0.9,
+    temperature: Number(cfg.ai_temperature ?? 0.9),
+    max_tokens: Number(cfg.ai_max_tokens ?? 2048),
   })
-  return r.choices[0].message.content.trim()
+  return response.choices[0].message.content.trim()
 })
 
-// ---- 批量导出 ----
+ipcMain.handle('ai-test', async (_, cfg) => {
+  const client = getAiClient(cfg)
+  const response = await client.chat.completions.create({
+    model: cfg.ai_model || 'gpt-3.5-turbo',
+    messages: [{ role: 'user', content: '请只回复 OK。' }],
+    temperature: Number(cfg.ai_temperature ?? 0.9),
+    max_tokens: 32,
+  })
+  return response.choices[0].message.content.trim()
+})
+
 ipcMain.handle('batch-export', (_, { dir, files }) => {
   fs.mkdirSync(dir, { recursive: true })
-  let n = 0
-  for (const f of files) {
-    try { fs.writeFileSync(path.join(dir, f.name), f.content, 'utf-8'); n++ } catch {}
+  let count = 0
+  for (const file of files) {
+    try {
+      fs.writeFileSync(path.join(dir, file.name), file.content, 'utf-8')
+      count += 1
+    } catch {}
   }
-  return n
+  return count
 })
