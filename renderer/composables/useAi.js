@@ -1,4 +1,4 @@
-// 用途：封装 AI 批量生成、标题优化、属性补全和详情生成能力。
+// 用途：封装 AI 批量生成、标题优化、SKU 增强、属性补全和详情生成能力。
 const { reactive } = Vue
 
 export function useAi(configState, productData, galleryState, logger) {
@@ -6,6 +6,8 @@ export function useAi(configState, productData, galleryState, logger) {
   const titleDialog = reactive({ show: false, loading: false, suggestions: [] })
   const propsDialog = reactive({ show: false, loading: false, suggestions: [] })
   const detailDialog = reactive({ show: false, loading: false, blocks: [] })
+  const skuNameDialog = reactive({ show: false, loading: false, suggestions: [] })
+  const skuCodeDialog = reactive({ show: false, loading: false, suggestions: [] })
 
   function requireAiReady() {
     if (!configState.cfg.ai_base_url || !configState.cfg.ai_api_key) {
@@ -40,9 +42,11 @@ export function useAi(configState, productData, galleryState, logger) {
 
     try {
       const skuText = skus.length ? skus.map(name => '- ' + name).join('\n') : '（无 SKU）'
-      const prompt = '你是一个电商运营专家。请基于以下商品信息，生成 ' + batchDialog.n + ' 套不同的标题和 SKU 名称变体。\n\n'
+      const prompt = '你是一个电商运营专家。请基于以下商品信息，生成 '
+        + batchDialog.n + ' 套不同的标题和 SKU 名称变体。\n\n'
         + '原标题：' + title + '\n原 SKU 列表：\n' + skuText + '\n\n'
-        + '要求：\n1. 每套标题自然、吸引人，包含核心关键词但措辞不同\n'
+        + '要求：\n'
+        + '1. 每套标题自然、吸引人，包含核心关键词但措辞不同\n'
         + '2. SKU 名称与原 SKU 一一对应，数量保持一致（' + skus.length + ' 个）\n'
         + '3. 每套之间有明显差异\n'
         + '以 JSON 数组返回：[{"标题":"...","SKU":["..."]}]\n只返回 JSON，不要其他内容。'
@@ -56,8 +60,8 @@ export function useAi(configState, productData, galleryState, logger) {
       const files = items.map((item, index) => {
         const data = productData.toRawData()
         data.FromItem.ItemName = item['标题'] || title
-        const nextSkus = item['SKU'] || []
-        for (let i = 0; i < (data.FromSkus || []).length; i++) {
+        const nextSkus = item.SKU || []
+        for (let i = 0; i < (data.FromSkus || []).length; i += 1) {
           if (i >= nextSkus.length) continue
           const sku = data.FromSkus[i]
           const oldValue = ((sku.Specs || [])[0] || {}).SpecValue || ''
@@ -115,6 +119,104 @@ export function useAi(configState, productData, galleryState, logger) {
     logger.log('已应用 AI 标题建议')
   }
 
+  async function optimizeSkuNames() {
+    if (!productData.D.value) return
+    if (!requireAiReady()) return
+    const rows = productData.getSelectedSkuRows()
+    if (!rows.length) {
+      ElementPlus.ElMessage.warning('请先勾选需要优化的 SKU 行')
+      return
+    }
+
+    skuNameDialog.loading = true
+    skuNameDialog.show = true
+    try {
+      const summary = productData.getProductSummary()
+      const suggestions = await window.api.aiOptimizeSkus({
+        cfg: configState.cfgPayload(),
+        title: summary.title,
+        category: summary.category,
+        skus: rows.map(row => row.sv),
+      })
+      skuNameDialog.suggestions = suggestions.map((value, idx) => ({
+        index: rows[idx]._i,
+        original: rows[idx].sv,
+        value,
+        checked: true,
+      }))
+      logger.log('已生成 ' + skuNameDialog.suggestions.length + ' 条 SKU 名称建议')
+    } catch (err) {
+      ElementPlus.ElMessage.error('SKU 名称优化失败：' + err.message)
+      logger.log('SKU 名称优化失败：' + err.message)
+      skuNameDialog.show = false
+    }
+    skuNameDialog.loading = false
+  }
+
+  function applyCheckedSkuNames() {
+    const selected = skuNameDialog.suggestions.filter(item => item.checked)
+    if (!selected.length) {
+      ElementPlus.ElMessage.warning('请至少选择一条 SKU 名称建议')
+      return
+    }
+    const count = productData.applyOptimizedSkuNames(selected)
+    skuNameDialog.show = false
+    logger.log('已应用 ' + count + ' 条 SKU 名称建议')
+    ElementPlus.ElMessage.success('SKU 名称已更新')
+  }
+
+  async function fillSkuCodes() {
+    if (!productData.D.value) return
+    if (!requireAiReady()) return
+    const rows = productData.getSkusMissingCodes()
+    if (!rows.length) {
+      ElementPlus.ElMessage.success('所有 SKU 编码和条码都已填写')
+      return
+    }
+
+    skuCodeDialog.loading = true
+    skuCodeDialog.show = true
+    try {
+      const summary = productData.getProductSummary()
+      const suggestions = await window.api.aiFillSkuCodes({
+        cfg: configState.cfgPayload(),
+        title: summary.title,
+        category: summary.category,
+        skus: rows.map(row => ({
+          name: row.sn,
+          value: row.sv,
+          SkuCode: row.SkuCode || '',
+          Barcode: row.Barcode || '',
+        })),
+      })
+      skuCodeDialog.suggestions = suggestions.map((item, idx) => ({
+        index: rows[idx]._i,
+        name: rows[idx].sv,
+        SkuCode: item?.SkuCode || '',
+        Barcode: item?.Barcode || '',
+        checked: true,
+      }))
+      logger.log('已生成 ' + skuCodeDialog.suggestions.length + ' 条 SKU 编码建议')
+    } catch (err) {
+      ElementPlus.ElMessage.error('SKU 编码补全失败：' + err.message)
+      logger.log('SKU 编码补全失败：' + err.message)
+      skuCodeDialog.show = false
+    }
+    skuCodeDialog.loading = false
+  }
+
+  function applySkuCodeSuggestions() {
+    const selected = skuCodeDialog.suggestions.filter(item => item.checked)
+    if (!selected.length) {
+      ElementPlus.ElMessage.warning('请至少选择一条 SKU 编码建议')
+      return
+    }
+    const count = productData.applySkuCodeSuggestions(selected)
+    skuCodeDialog.show = false
+    logger.log('已应用 ' + count + ' 个 SKU 编码字段')
+    ElementPlus.ElMessage.success('SKU 编码已补全')
+  }
+
   async function fillProps() {
     if (!productData.D.value) return
     if (!requireAiReady()) return
@@ -126,7 +228,7 @@ export function useAi(configState, productData, galleryState, logger) {
         cfg: configState.cfgPayload(),
         title: summary.title,
         category: summary.category,
-        existingProps: summary.props,
+        existingProps: summary.props.filter(item => item.IsSellPro != 1),
       })
       propsDialog.suggestions = suggestions.map(item => ({ ...item, checked: true }))
       logger.log('已生成 ' + propsDialog.suggestions.length + ' 条属性建议')
@@ -187,10 +289,16 @@ export function useAi(configState, productData, galleryState, logger) {
     titleDialog,
     propsDialog,
     detailDialog,
+    skuNameDialog,
+    skuCodeDialog,
     pickBatchDir,
     runBatchGenerate,
     optimizeTitle,
     applyTitleSuggestion,
+    optimizeSkuNames,
+    applyCheckedSkuNames,
+    fillSkuCodes,
+    applySkuCodeSuggestions,
     fillProps,
     applyCheckedProps,
     generateDetail,

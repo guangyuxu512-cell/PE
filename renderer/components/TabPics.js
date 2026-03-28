@@ -5,7 +5,18 @@ export default {
   name: 'TabPics',
   setup() {
     const app = inject('appState')
-    return { app }
+
+    function previewPic(row) {
+      const images = app.productData.picList.map(item => item.Url).filter(Boolean)
+      const currentIndex = images.indexOf(row.Url)
+      app.openLightbox(images, currentIndex < 0 ? 0 : currentIndex, '商品主图')
+    }
+
+    async function replacePic(row) {
+      await app.gallery.replaceMainPic(row._i)
+    }
+
+    return { app, previewPic, replacePic }
   },
   template: `
     <div class="tscr">
@@ -24,16 +35,20 @@ export default {
         highlight-current-row
         style="width:100%"
         @current-change="row => app.productData.picIndex = row ? row._i : -1"
-        @row-dblclick="() => app.productData.openPicDialog('edit')"
       >
         <el-table-column prop="PicIndex" label="序号" width="70" align="center"></el-table-column>
-        <el-table-column prop="Url" label="图片链接" show-overflow-tooltip></el-table-column>
-        <el-table-column prop="LocalPath" label="本地路径" width="220" show-overflow-tooltip></el-table-column>
-        <el-table-column prop="Keys" label="Keys" width="120"></el-table-column>
-        <el-table-column label="预览" width="100" align="center">
+        <el-table-column prop="Url" label="图片链接" min-width="300" show-overflow-tooltip></el-table-column>
+        <el-table-column prop="LocalPath" label="本地路径" min-width="220" show-overflow-tooltip></el-table-column>
+        <el-table-column label="预览" width="210" align="center">
           <template #default="{ row }">
-            <div style="width:52px;height:52px;margin:0 auto;border-radius:6px;overflow:hidden">
-              <image-proxy :src="row.Url" :alt="row.Url"></image-proxy>
+            <div class="thumb-cell">
+              <div class="thumb-cell__image">
+                <image-proxy :src="row.Url" :alt="row.Url"></image-proxy>
+              </div>
+              <div class="thumb-cell__actions">
+                <el-button size="small" @click="previewPic(row)" :disabled="!row.Url">👁 预览</el-button>
+                <el-button size="small" type="primary" plain @click="replacePic(row)">本地换图</el-button>
+              </div>
             </div>
           </template>
         </el-table-column>

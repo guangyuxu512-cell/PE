@@ -4,7 +4,7 @@ const https = require('https')
 const { URL } = require('url')
 
 const imageProxyCache = new Map()
-const IMAGE_CACHE_LIMIT = 100
+const IMAGE_CACHE_LIMIT = 200
 const PROXY_HOST_PATTERNS = [
   /alicdn\.com$/i,
   /tbcdn\.cn$/i,
@@ -80,7 +80,7 @@ function touchCache(url, payload) {
   }
 }
 
-function fetchImageWithProxy(url) {
+function fetchImageWithProxy(url, depth = 0) {
   if (!url) return Promise.resolve(null)
   if (imageProxyCache.has(url)) {
     const cached = imageProxyCache.get(url)
@@ -105,6 +105,18 @@ function fetchImageWithProxy(url) {
       },
       timeout: 10000,
     }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && depth < 3) {
+        const location = res.headers.location
+        res.resume()
+        if (!location) {
+          resolve(null)
+          return
+        }
+        const redirectUrl = new URL(location, url).toString()
+        fetchImageWithProxy(redirectUrl, depth + 1).then(resolve).catch(() => resolve(null))
+        return
+      }
+
       if (res.statusCode !== 200) {
         res.resume()
         resolve(null)

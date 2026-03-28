@@ -1,19 +1,49 @@
 // 用途：集中存放前端共享常量、模板和格式化工具。
 export const TMPL = {
   FromItem: {
-    SysId: 1, ItemKey: '', ItemName: '', ItemUrl: '',
-    ItemPrice: 0, PromotionPrice: 0, CouponPrice: null, ItemPicUrl: '',
-    SortId: 0, SortName: '', SortPath: '',
-    Province: '', ProvinceName: '', City: '', CityName: '',
-    Nums: 0, FreeShipping: 0, OuterCode: null, Barcode: null,
-    Sellpoint: null, Weight: null, Size: null,
-    IsReturn: null, IsTicket: null, IsRepair: null, SubStock: null, OnSell: 1,
-    ArticleNumber: null, QualificationCode: null, IndustrialCode: null,
-    SellerAccount: null, IsConsign: null, SellNums: 0,
-    ShortTitle: null, SellingPoint: null, ItemRemark: null, Details: null,
-    PurchaseLimit: null, LimitCount: 0,
-    WhiteBaseImageUrl: null, TransparentImageUrl: null,
-    RefundRule: null, MainVideoUrl: null,
+    SysId: 1,
+    ItemKey: '',
+    ItemName: '',
+    ItemUrl: '',
+    ItemPrice: 0,
+    PromotionPrice: 0,
+    CouponPrice: null,
+    ItemPicUrl: '',
+    SortId: 0,
+    SortName: '',
+    SortPath: '',
+    Province: '',
+    ProvinceName: '',
+    City: '',
+    CityName: '',
+    Nums: 0,
+    FreeShipping: 0,
+    OuterCode: null,
+    Barcode: null,
+    Sellpoint: null,
+    Weight: null,
+    Size: null,
+    IsReturn: null,
+    IsTicket: null,
+    IsRepair: null,
+    SubStock: null,
+    OnSell: 1,
+    ArticleNumber: null,
+    QualificationCode: null,
+    IndustrialCode: null,
+    SellerAccount: null,
+    IsConsign: null,
+    SellNums: 0,
+    ShortTitle: null,
+    SellingPoint: null,
+    ItemRemark: null,
+    Details: null,
+    PurchaseLimit: null,
+    LimitCount: 0,
+    WhiteBaseImageUrl: null,
+    TransparentImageUrl: null,
+    RefundRule: null,
+    MainVideoUrl: null,
   },
   FromContent: { PcDesc: '' },
   FromPics: [],
@@ -22,28 +52,58 @@ export const TMPL = {
 }
 
 export const FG = [
-  { name: '商品基础', fields: [
-    { key: 'ItemName', label: '商品标题' }, { key: 'ShortTitle', label: '短标题' },
-    { key: 'ItemUrl', label: '商品链接' }, { key: 'ItemKey', label: '商品 ID' },
-    { key: 'ItemPicUrl', label: '主图链接' }, { key: 'MainVideoUrl', label: '主图视频' },
-  ]},
-  { name: '价格与库存', fields: [
-    { key: 'ItemPrice', label: '价格' }, { key: 'PromotionPrice', label: '促销价' },
-    { key: 'CouponPrice', label: '券后价' }, { key: 'Nums', label: '总库存' },
-    { key: 'LimitCount', label: '限购数量' }, { key: 'PurchaseLimit', label: '限购说明' },
-  ]},
-  { name: '分类信息', fields: [
-    { key: 'SortId', label: '类目 ID' }, { key: 'SortName', label: '类目名称' }, { key: 'SortPath', label: '类目路径' },
-  ]},
-  { name: '发货地', fields: [
-    { key: 'Province', label: '省份代码' }, { key: 'ProvinceName', label: '省份名称' },
-    { key: 'City', label: '城市代码' }, { key: 'CityName', label: '城市名称' },
-  ]},
+  {
+    name: '商品基础',
+    fields: [
+      { key: 'ItemName', label: '商品标题' },
+      { key: 'ShortTitle', label: '短标题' },
+      { key: 'ItemUrl', label: '商品链接' },
+      { key: 'ItemKey', label: '商品 ID' },
+      { key: 'ItemPicUrl', label: '主图链接' },
+      { key: 'MainVideoUrl', label: '主图视频' },
+    ],
+  },
+  {
+    name: '价格与库存',
+    fields: [
+      { key: 'ItemPrice', label: '价格' },
+      { key: 'PromotionPrice', label: '促销价' },
+      { key: 'CouponPrice', label: '券后价' },
+      { key: 'Nums', label: '总库存' },
+      { key: 'LimitCount', label: '限购数量' },
+      { key: 'PurchaseLimit', label: '限购说明' },
+    ],
+  },
+  {
+    name: '分类信息',
+    fields: [
+      { key: 'SortId', label: '类目 ID' },
+      { key: 'SortName', label: '类目名称' },
+      { key: 'SortPath', label: '类目路径' },
+    ],
+  },
+  {
+    name: '发货地',
+    fields: [
+      { key: 'Province', label: '省份代码' },
+      { key: 'ProvinceName', label: '省份名称' },
+      { key: 'City', label: '城市代码' },
+      { key: 'CityName', label: '城市名称' },
+    ],
+  },
 ]
 
 export const NUMS = new Set([
-  'SysId', 'ItemPrice', 'PromotionPrice', 'CouponPrice', 'SortId',
-  'Nums', 'FreeShipping', 'OnSell', 'SellNums', 'LimitCount',
+  'SysId',
+  'ItemPrice',
+  'PromotionPrice',
+  'CouponPrice',
+  'SortId',
+  'Nums',
+  'FreeShipping',
+  'OnSell',
+  'SellNums',
+  'LimitCount',
 ])
 
 export const CFG_DEFAULTS = {
@@ -74,6 +134,10 @@ export const PROXY_IMAGE_HOST_KEYWORDS = [
   'tbcdn.cn',
   'taobaocdn.com',
   '1688pic.com',
+]
+
+export const COS_HOST_KEYWORDS = [
+  'myqcloud.com',
 ]
 
 export const DETAIL_WRAPPER_START = '<div style="width:750px;margin:0 auto;">'

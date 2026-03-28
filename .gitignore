@@ -15,6 +15,7 @@ frontend/dist/
 
 # 缓存
 .pytest_cache/
+.npm-cache/
 
 #角色定义文档
 .roles/

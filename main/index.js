@@ -1,8 +1,9 @@
-// 用途：Electron 主进程入口，负责创建窗口、加载页面并按模块注册 IPC。
+// 用途：Electron 主进程入口，负责窗口生命周期与 IPC 注册。
 const path = require('path')
 const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard } = require('electron')
-const { loadEnvFile, readCfg, writeCfg } = require('./config')
+const { loadEnvFile } = require('./config')
 
+const registerSettingsIpc = require('./ipc/settings')
 const registerFileIpc = require('./ipc/file')
 const registerCosIpc = require('./ipc/cos')
 const registerAiIpc = require('./ipc/ai')
@@ -35,17 +36,9 @@ function getWindow() {
   return win
 }
 
-function registerConfigIpc() {
-  ipcMain.handle('cfg-load', () => readCfg())
-  ipcMain.handle('cfg-save', (_, cfg) => {
-    writeCfg(cfg)
-    return true
-  })
-}
-
 app.whenReady().then(() => {
   createWindow()
-  registerConfigIpc()
+  registerSettingsIpc({ ipcMain })
   registerFileIpc({ ipcMain, dialog, getWindow })
   registerCosIpc({ ipcMain })
   registerAiIpc({ ipcMain })

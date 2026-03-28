@@ -32,6 +32,10 @@ function buildSectionBlock(section, imageUrl) {
   return `<div style="padding:18px 0;border-bottom:1px solid #f0f0f0;">${title}${subtitle}${highlights}${image}</div>`
 }
 
+function getSkuSpec(sku) {
+  return (sku?.Specs || [])[0] || { SpecName: '', SpecValue: '' }
+}
+
 export function useProductData(logger) {
   const D = ref(null)
   const info = reactive({})
@@ -39,20 +43,66 @@ export function useProductData(logger) {
   const json = ref('')
   const detailMode = ref('visual')
   const detailImages = ref([])
+  const selectedSkuIndexes = ref([])
 
   const picIndex = ref(-1)
   const skuIndex = ref(-1)
   const propIndex = ref(-1)
 
-  const picDialog = reactive({ show: false, mode: 'add', idx: -1, d: { Url: '', LocalPath: '', Keys: '', PicIndex: '0' } })
+  const picDialog = reactive({ show: false, mode: 'add', idx: -1, d: { Url: '', LocalPath: '', PicIndex: '0' } })
   const skuDialog = reactive({ show: false, mode: 'add', idx: -1, d: { sn: '', sv: '', SkuId: '', Price: 0, PromotionPrice: 0, CouponPrice: 0, Num: 0, SkuCode: '', Barcode: '' } })
   const propDialog = reactive({ show: false, mode: 'add', idx: -1, d: { Name: '', Value: '', IsSellPro: 0, PicUrl: '', Aliasname: '', PropertyName: '', PropertyKey: '' } })
 
+  function ensure(data) {
+    data.FromItem = data.FromItem || {}
+    data.FromContent = data.FromContent || {}
+    data.FromPics = data.FromPics || []
+    data.FromProperties = data.FromProperties || []
+    data.FromSkus = data.FromSkus || []
+  }
+
+  function findSaleProp(specName, specValue) {
+    if (!D.value) return { index: -1, property: null }
+    const index = (D.value.FromProperties || []).findIndex(item => item.IsSellPro == 1 && item.Name === specName && item.Value === specValue)
+    return {
+      index,
+      property: index >= 0 ? D.value.FromProperties[index] : null,
+    }
+  }
+
+  function ensureSalePropForSku(sku) {
+    if (!D.value || !sku) return { index: -1, property: null }
+    const spec = getSkuSpec(sku)
+    if (!spec.SpecValue) return { index: -1, property: null }
+
+    const matched = findSaleProp(spec.SpecName, spec.SpecValue)
+    if (matched.property) return matched
+
+    const property = {
+      SysId: (D.value.FromItem || {}).SysId || 1,
+      PropertyName: null,
+      Name: spec.SpecName,
+      Value: spec.SpecValue,
+      PropertyKey: null,
+      IsSellPro: 1,
+      Aliasname: null,
+      PicUrl: (D.value.FromItem || {}).ItemPicUrl || null,
+      Index: null,
+    }
+    D.value.FromProperties.push(property)
+    return {
+      index: D.value.FromProperties.length - 1,
+      property,
+    }
+  }
+
   const picList = computed(() => D.value ? (D.value.FromPics || []).map((item, index) => ({ ...item, _i: index })) : [])
+
   const skuList = computed(() => {
     if (!D.value) return []
     return (D.value.FromSkus || []).map((sku, index) => {
-      const spec = (sku.Specs || [])[0] || { SpecName: '', SpecValue: '' }
+      const spec = getSkuSpec(sku)
+      const matched = findSaleProp(spec.SpecName, spec.SpecValue)
       return {
         _i: index,
         sn: spec.SpecName,
@@ -64,18 +114,18 @@ export function useProductData(logger) {
         Num: sku.Num,
         SkuCode: sku.SkuCode || '',
         Barcode: sku.Barcode || '',
+        imageUrl: matched.property?.PicUrl || '',
+        propertyIndex: matched.index,
       }
     })
   })
+
   const propList = computed(() => D.value ? (D.value.FromProperties || []).map((item, index) => ({ ...item, _i: index })) : [])
 
-  function ensure(data) {
-    data.FromItem = data.FromItem || {}
-    data.FromContent = data.FromContent || {}
-    data.FromPics = data.FromPics || []
-    data.FromProperties = data.FromProperties || []
-    data.FromSkus = data.FromSkus || []
-  }
+  const selectedSkuRows = computed(() => {
+    const selected = new Set(selectedSkuIndexes.value)
+    return skuList.value.filter(row => selected.has(row._i))
+  })
 
   function extractDetailImagesFromHtml(source) {
     const parser = new DOMParser()
@@ -125,6 +175,7 @@ export function useProductData(logger) {
     picIndex.value = -1
     skuIndex.value = -1
     propIndex.value = -1
+    selectedSkuIndexes.value = []
   }
 
   function fromUi() {
@@ -149,7 +200,7 @@ export function useProductData(logger) {
   function newBlank() {
     D.value = clone(TMPL)
     toUi()
-    logger.log('已新建空白商品')
+    logger.log('Blank product created')
   }
 
   async function importFile() {
@@ -158,40 +209,40 @@ export function useProductData(logger) {
     try {
       const text = result.content.replace(/^\uFEFF/, '')
       const start = text.indexOf('{')
-      if (start < 0) throw new Error('未找到 JSON 对象')
+      if (start < 0) throw new Error('JSON object not found')
       D.value = JSON.parse(text.substring(start))
       ensure(D.value)
       toUi()
-      logger.log('已导入 ' + result.path)
+      logger.log('Imported ' + result.path)
     } catch (err) {
-      ElementPlus.ElMessage.error('导入失败：' + err.message)
+      ElementPlus.ElMessage.error('Import failed: ' + err.message)
     }
   }
 
   async function exportFile() {
     if (!D.value) {
-      ElementPlus.ElMessage.warning('请先加载数据')
+      ElementPlus.ElMessage.warning('Load product data first')
       return
     }
     fromUi()
     syncJson()
     const savePath = await window.api.saveFile(json.value)
-    if (savePath) logger.log('已导出 ' + savePath)
+    if (savePath) logger.log('Exported ' + savePath)
   }
 
   function loadFromJson() {
     const text = json.value.trim()
     if (!text) {
-      ElementPlus.ElMessage.warning('JSON 文本框为空')
+      ElementPlus.ElMessage.warning('JSON is empty')
       return
     }
     try {
       D.value = JSON.parse(text)
       ensure(D.value)
       toUi()
-      logger.log('已从 JSON 标签页加载')
+      logger.log('Loaded from JSON tab')
     } catch (err) {
-      ElementPlus.ElMessage.error('解析失败：' + err.message)
+      ElementPlus.ElMessage.error('Parse failed: ' + err.message)
     }
   }
 
@@ -199,15 +250,15 @@ export function useProductData(logger) {
     if (!D.value) return
     fromUi()
     syncJson()
-    logger.log('已同步到 JSON 标签页')
+    logger.log('Synced to JSON tab')
   }
 
   function saveInfo() {
     if (!D.value) return
     fromUi()
     syncJson()
-    logger.log('已保存基础信息')
-    ElementPlus.ElMessage.success('已保存')
+    logger.log('Saved basic info')
+    ElementPlus.ElMessage.success('Saved')
   }
 
   function onTabChange(name) {
@@ -259,8 +310,8 @@ export function useProductData(logger) {
     return {
       title: (D.value?.FromItem || {}).ItemName || '',
       category: (D.value?.FromItem || {}).SortName || '',
-      skus: (D.value?.FromSkus || []).map(item => ((item.Specs || [])[0] || {}).SpecValue || '').filter(Boolean),
-      props: (D.value?.FromProperties || []).map(item => ({ Name: item.Name, Value: item.Value })),
+      skus: skuList.value.map(item => item.sv).filter(Boolean),
+      props: (D.value?.FromProperties || []).map(item => ({ Name: item.Name, Value: item.Value, IsSellPro: item.IsSellPro })),
       pics: (D.value?.FromPics || []).map(item => item.Url).filter(Boolean),
     }
   }
@@ -286,14 +337,17 @@ export function useProductData(logger) {
     syncHtmlFromDetailImages()
   }
 
-  function moveDetailImage(index, step) {
-    const target = index + step
-    if (target < 0 || target >= detailImages.value.length) return
+  function reorderDetailImage(from, to) {
+    if (from === to || from < 0 || to < 0 || from >= detailImages.value.length || to >= detailImages.value.length) return
     const next = [...detailImages.value]
-    const [item] = next.splice(index, 1)
-    next.splice(target, 0, item)
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
     detailImages.value = next
     syncHtmlFromDetailImages()
+  }
+
+  function moveDetailImage(index, step) {
+    reorderDetailImage(index, index + step)
   }
 
   function removeDetailImage(index) {
@@ -326,8 +380,8 @@ export function useProductData(logger) {
       if (property.IsSellPro == 1 && property.Name) return property.Name.trim()
     }
     for (const sku of D.value.FromSkus || []) {
-      const spec = (sku.Specs || [])[0]
-      if (spec && spec.SpecName) return spec.SpecName
+      const spec = getSkuSpec(sku)
+      if (spec.SpecName) return spec.SpecName
     }
     return '颜色分类'
   }
@@ -365,27 +419,28 @@ export function useProductData(logger) {
   function openPicDialog(mode) {
     if (!D.value) return
     if (mode === 'add') {
-      Object.assign(picDialog, { show: true, mode, idx: -1, d: { Url: '', LocalPath: '', Keys: '', PicIndex: String((D.value.FromPics || []).length) } })
+      Object.assign(picDialog, { show: true, mode, idx: -1, d: { Url: '', LocalPath: '', PicIndex: String((D.value.FromPics || []).length) } })
       return
     }
     if (picIndex.value < 0) return
     const pic = D.value.FromPics[picIndex.value]
-    Object.assign(picDialog, { show: true, mode, idx: picIndex.value, d: { Url: pic.Url || '', LocalPath: pic.LocalPath || '', Keys: pic.Keys || '', PicIndex: String(pic.PicIndex ?? picIndex.value) } })
+    Object.assign(picDialog, { show: true, mode, idx: picIndex.value, d: { Url: pic.Url || '', LocalPath: pic.LocalPath || '', PicIndex: String(pic.PicIndex ?? picIndex.value) } })
   }
 
   function savePic() {
+    const source = picDialog.mode === 'edit' ? (D.value.FromPics[picDialog.idx] || {}) : {}
     const record = {
       LocalPath: picDialog.d.LocalPath || null,
       Url: picDialog.d.Url || '',
-      Keys: picDialog.d.Keys || null,
+      Keys: source.Keys || null,
       PicIndex: picDialog.d.PicIndex ? Number(picDialog.d.PicIndex) : 0,
     }
     if (picDialog.mode === 'add') {
       D.value.FromPics.push(record)
-      logger.log('已新增主图')
+      logger.log('Added main image')
     } else {
       D.value.FromPics[picDialog.idx] = record
-      logger.log('已编辑主图 [' + picDialog.idx + ']')
+      logger.log('Edited main image [' + picDialog.idx + ']')
     }
     picDialog.show = false
     if (!D.value.FromItem.ItemPicUrl && D.value.FromPics[0]) D.value.FromItem.ItemPicUrl = D.value.FromPics[0].Url
@@ -395,14 +450,14 @@ export function useProductData(logger) {
   async function deletePic() {
     if (picIndex.value < 0) return
     try {
-      await ElementPlus.ElMessageBox.confirm('确认删除第 ' + picIndex.value + ' 张主图？', '删除确认')
+      await ElementPlus.ElMessageBox.confirm('Delete main image #' + (picIndex.value + 1) + '?', 'Confirm delete')
     } catch {
       return
     }
     D.value.FromPics.splice(picIndex.value, 1)
     picIndex.value = -1
     syncJson()
-    logger.log('已删除主图')
+    logger.log('Deleted main image')
   }
 
   function openSkuDialog(mode) {
@@ -413,14 +468,14 @@ export function useProductData(logger) {
     }
     if (skuIndex.value < 0) return
     const sku = D.value.FromSkus[skuIndex.value]
-    const spec = (sku.Specs || [])[0] || { SpecName: '', SpecValue: '' }
+    const spec = getSkuSpec(sku)
     Object.assign(skuDialog, { show: true, mode, idx: skuIndex.value, d: { sn: spec.SpecName, sv: spec.SpecValue, SkuId: sku.SkuId || '', Price: sku.Price || 0, PromotionPrice: sku.PromotionPrice || 0, CouponPrice: sku.CouponPrice || 0, Num: sku.Num || 0, SkuCode: sku.SkuCode || '', Barcode: sku.Barcode || '' } })
   }
 
   function saveSku() {
     const data = skuDialog.d
     if (!(data.sv || '').trim()) {
-      ElementPlus.ElMessage.warning('规格值不能为空')
+      ElementPlus.ElMessage.warning('SKU value is required')
       return
     }
     const record = {
@@ -438,10 +493,10 @@ export function useProductData(logger) {
     }
     if (skuDialog.mode === 'add') {
       D.value.FromSkus.push(record)
-      logger.log('已新增 SKU：' + data.sv)
+      logger.log('Added SKU: ' + data.sv)
     } else {
       D.value.FromSkus[skuDialog.idx] = record
-      logger.log('已编辑 SKU：' + data.sv)
+      logger.log('Edited SKU: ' + data.sv)
     }
     syncSellProps()
     skuDialog.show = false
@@ -450,17 +505,19 @@ export function useProductData(logger) {
 
   async function deleteSku() {
     if (skuIndex.value < 0) return
-    const value = ((D.value.FromSkus[skuIndex.value].Specs || [])[0] || {}).SpecValue || ''
+    const deletingIndex = skuIndex.value
+    const value = getSkuSpec(D.value.FromSkus[skuIndex.value]).SpecValue || ''
     try {
-      await ElementPlus.ElMessageBox.confirm('确认删除 SKU：' + value + '？', '删除确认')
+      await ElementPlus.ElMessageBox.confirm('Delete SKU: ' + value + '?', 'Confirm delete')
     } catch {
       return
     }
-    D.value.FromSkus.splice(skuIndex.value, 1)
+    D.value.FromSkus.splice(deletingIndex, 1)
     skuIndex.value = -1
+    selectedSkuIndexes.value = []
     syncSellProps()
     syncJson()
-    logger.log('已删除 SKU：' + value)
+    logger.log('Deleted SKU: ' + value)
   }
 
   function openPropDialog(mode) {
@@ -489,10 +546,10 @@ export function useProductData(logger) {
     }
     if (propDialog.mode === 'add') {
       D.value.FromProperties.push(record)
-      logger.log('已新增属性 ' + data.Name + '=' + data.Value)
+      logger.log('Added property ' + data.Name + '=' + data.Value)
     } else {
       D.value.FromProperties[propDialog.idx] = record
-      logger.log('已编辑属性 [' + propDialog.idx + ']')
+      logger.log('Edited property [' + propDialog.idx + ']')
     }
     propDialog.show = false
     syncJson()
@@ -502,14 +559,104 @@ export function useProductData(logger) {
     if (propIndex.value < 0) return
     const property = D.value.FromProperties[propIndex.value]
     try {
-      await ElementPlus.ElMessageBox.confirm('确认删除属性 ' + property.Name + '=' + property.Value + '？', '删除确认')
+      await ElementPlus.ElMessageBox.confirm('Delete property ' + property.Name + '=' + property.Value + '?', 'Confirm delete')
     } catch {
       return
     }
     D.value.FromProperties.splice(propIndex.value, 1)
     propIndex.value = -1
     syncJson()
-    logger.log('已删除属性')
+    logger.log('Deleted property')
+  }
+
+  function setSkuSelection(rows) {
+    selectedSkuIndexes.value = rows.map(row => row._i)
+  }
+
+  function getSelectedSkuRows() {
+    return selectedSkuRows.value
+  }
+
+  function getSkusMissingCodes() {
+    return skuList.value.filter(item => !item.SkuCode || !item.Barcode)
+  }
+
+  function applyOptimizedSkuNames(items) {
+    if (!D.value) return 0
+    let count = 0
+    for (const item of items || []) {
+      const sku = D.value.FromSkus[item.index]
+      if (!sku || !(item.value || '').trim()) continue
+      const spec = getSkuSpec(sku)
+      const oldValue = spec.SpecValue
+      spec.SpecValue = item.value.trim()
+      sku.SkuInfo = `${spec.SpecName}:${spec.SpecValue}`
+      sku.SkuInfoShort = spec.SpecValue
+      const matched = findSaleProp(spec.SpecName, oldValue)
+      if (matched.property) matched.property.Value = spec.SpecValue
+      else ensureSalePropForSku(sku)
+      count += 1
+    }
+    syncJson()
+    return count
+  }
+
+  function applySkuCodeSuggestions(items) {
+    if (!D.value) return 0
+    let count = 0
+    for (const item of items || []) {
+      const sku = D.value.FromSkus[item.index]
+      if (!sku) continue
+      if (!sku.SkuCode && item.SkuCode) {
+        sku.SkuCode = item.SkuCode
+        count += 1
+      }
+      if (!sku.Barcode && item.Barcode) {
+        sku.Barcode = item.Barcode
+        count += 1
+      }
+    }
+    syncJson()
+    return count
+  }
+
+  function replacePicByUpload(index, upload) {
+    if (!D.value || index < 0) return
+    const current = D.value.FromPics[index] || {}
+    const previousUrl = current.Url || ''
+    D.value.FromPics[index] = {
+      ...current,
+      LocalPath: upload.localPath || current.LocalPath || null,
+      Url: upload.url,
+      Keys: upload.key || current.Keys || null,
+      PicIndex: current.PicIndex ?? index,
+    }
+    if (D.value.FromItem.ItemPicUrl === previousUrl || (!D.value.FromItem.ItemPicUrl && index === 0)) {
+      D.value.FromItem.ItemPicUrl = upload.url
+      info.ItemPicUrl = upload.url
+    }
+    syncJson()
+  }
+
+  function replaceSkuImageByUpload(index, upload) {
+    if (!D.value || index < 0) return
+    const sku = D.value.FromSkus[index]
+    const matched = ensureSalePropForSku(sku)
+    if (!matched.property) return
+    matched.property.PicUrl = upload.url
+    syncJson()
+  }
+
+  function replacePropImageByUpload(index, upload) {
+    if (!D.value || index < 0) return
+    const property = D.value.FromProperties[index]
+    if (!property) return
+    property.PicUrl = upload.url
+    syncJson()
+  }
+
+  function replaceDetailImageByUpload(index, upload) {
+    updateDetailImage(index, upload.url)
   }
 
   return {
@@ -520,6 +667,8 @@ export function useProductData(logger) {
     json,
     detailMode,
     detailImages,
+    selectedSkuIndexes,
+    selectedSkuRows,
     picIndex,
     skuIndex,
     propIndex,
@@ -546,6 +695,7 @@ export function useProductData(logger) {
     applyDetailSections,
     addDetailImage,
     updateDetailImage,
+    reorderDetailImage,
     moveDetailImage,
     removeDetailImage,
     insertDetailImages,
@@ -561,6 +711,15 @@ export function useProductData(logger) {
     openPropDialog,
     saveProp,
     deleteProp,
+    setSkuSelection,
+    getSelectedSkuRows,
+    getSkusMissingCodes,
+    applyOptimizedSkuNames,
+    applySkuCodeSuggestions,
+    replacePicByUpload,
+    replaceSkuImageByUpload,
+    replacePropImageByUpload,
+    replaceDetailImageByUpload,
     toRawData: () => clone(toRaw(D.value)),
   }
 }

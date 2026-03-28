@@ -1,4 +1,4 @@
-// 用途：封装存储桶图片列表、上传、删除、预览和复制操作。
+// 用途：封装存储桶图片列表、上传、删除、预览和图片替换闭环。
 import { formatBytes } from '../constants.js'
 
 const { reactive, computed } = Vue
@@ -54,18 +54,19 @@ export function useGallery(configState, productData, logger, tabState) {
     gallery.loading = false
   }
 
-  async function uploadToCos(options = {}) {
-    if (!galleryConfigured.value) {
-      tabState.value = 'settings'
-      ElementPlus.ElMessage.error('请先在系统设置中配置 COS 凭证')
-      return []
-    }
-    const files = await window.api.pickImages()
+  function ensureCosReady() {
+    if (galleryConfigured.value) return true
+    tabState.value = 'settings'
+    ElementPlus.ElMessage.error('请先在系统设置中配置 COS 凭证')
+    return false
+  }
+
+  async function uploadFiles(files, options = {}) {
+    if (!ensureCosReady()) return []
     if (!files.length) return []
 
-    const askAddToMain = !!options.askAddToMain
-    const refreshGallery = !!options.refreshGallery
-    if (refreshGallery) gallery.uploading = true
+    const shouldRefresh = !!options.refreshGallery || tabState.value === 'cos-gallery'
+    if (shouldRefresh) gallery.uploading = true
 
     logger.log('正在上传 ' + files.length + ' 张图片到 COS')
     try {
@@ -76,18 +77,20 @@ export function useGallery(configState, productData, logger, tabState) {
       for (const item of success) logger.log('已上传 ' + item.name + ' -> ' + item.url)
       for (const item of failed) logger.log('上传失败：' + item.name + ' - ' + item.err)
 
-      if (refreshGallery || tabState.value === 'cos-gallery') await loadCosGallery(true)
+      if (shouldRefresh) await loadCosGallery(true)
 
-      if (askAddToMain && success.length && productData.D.value) {
+      if (options.askAddToMain && success.length && productData.D.value) {
         try {
-          await ElementPlus.ElMessageBox.confirm('已成功上传 ' + success.length + ' 张图片，是否添加为商品主图？', '上传完成')
+          await ElementPlus.ElMessageBox.confirm(`已成功上传 ${success.length} 张图片，是否添加为商品主图？`, '上传完成')
           const count = productData.appendPicsByUrls(success.map(item => item.url))
           logger.log('已添加 ' + count + ' 张主图')
         } catch {}
       }
 
-      if (success.length) ElementPlus.ElMessage.success('上传成功 ' + success.length + ' 张')
-      if (failed.length) ElementPlus.ElMessage.warning('有 ' + failed.length + ' 张图片上传失败')
+      if (!options.silent) {
+        if (success.length) ElementPlus.ElMessage.success('上传成功 ' + success.length + ' 张')
+        if (failed.length) ElementPlus.ElMessage.warning('有 ' + failed.length + ' 张图片上传失败')
+      }
       return results
     } catch (err) {
       logger.log('上传失败：' + err.message)
@@ -98,10 +101,59 @@ export function useGallery(configState, productData, logger, tabState) {
     }
   }
 
+  async function pickAndUploadSingleImage(label) {
+    if (!ensureCosReady()) return null
+    const files = await window.api.pickImages()
+    if (!files.length) return null
+    const results = await uploadFiles([files[0]], { refreshGallery: true, silent: true })
+    const uploaded = results.find(item => item.ok)
+    if (!uploaded) {
+      ElementPlus.ElMessage.error(label + '上传失败')
+      return null
+    }
+    logger.log(label + '已上传到 COS')
+    ElementPlus.ElMessage.success(label + '已替换')
+    return {
+      ...uploaded,
+      localPath: files[0],
+    }
+  }
+
+  async function uploadToCos(options = {}) {
+    if (!ensureCosReady()) return []
+    const files = await window.api.pickImages()
+    if (!files.length) return []
+    return uploadFiles(files, options)
+  }
+
+  async function replaceMainPic(index) {
+    const uploaded = await pickAndUploadSingleImage('主图')
+    if (!uploaded) return
+    productData.replacePicByUpload(index, uploaded)
+  }
+
+  async function replaceSkuImage(index) {
+    const uploaded = await pickAndUploadSingleImage('SKU 图片')
+    if (!uploaded) return
+    productData.replaceSkuImageByUpload(index, uploaded)
+  }
+
+  async function replacePropImage(index) {
+    const uploaded = await pickAndUploadSingleImage('属性图片')
+    if (!uploaded) return
+    productData.replacePropImageByUpload(index, uploaded)
+  }
+
+  async function replaceDetailImage(index) {
+    const uploaded = await pickAndUploadSingleImage('详情图')
+    if (!uploaded) return
+    productData.replaceDetailImageByUpload(index, uploaded)
+  }
+
   async function deleteSelectedCos() {
     if (!gallerySelectedItems.value.length) return
     try {
-      await ElementPlus.ElMessageBox.confirm('确认删除已选中的 ' + gallerySelectedItems.value.length + ' 张图片？', '删除确认', { type: 'warning' })
+      await ElementPlus.ElMessageBox.confirm('确认删除已选中的 ' + gallerySelectedItems.value.length + ' 张图片吗？', '删除确认', { type: 'warning' })
     } catch {
       return
     }
@@ -168,7 +220,9 @@ export function useGallery(configState, productData, logger, tabState) {
   function toggleGallerySelection(key, checked) {
     if (checked) {
       if (!gallery.selKeys.includes(key)) gallery.selKeys = [...gallery.selKeys, key]
-    } else gallery.selKeys = gallery.selKeys.filter(item => item !== key)
+    } else {
+      gallery.selKeys = gallery.selKeys.filter(item => item !== key)
+    }
   }
 
   function onGalleryTableSelection(rows) {
@@ -185,7 +239,12 @@ export function useGallery(configState, productData, logger, tabState) {
     galleryStatsText,
     formatBytes,
     loadCosGallery,
+    uploadFiles,
     uploadToCos,
+    replaceMainPic,
+    replaceSkuImage,
+    replacePropImage,
+    replaceDetailImage,
     deleteSelectedCos,
     openPreview,
     copyUrl,

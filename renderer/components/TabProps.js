@@ -5,7 +5,17 @@ export default {
   name: 'TabProps',
   setup() {
     const app = inject('appState')
-    return { app }
+
+    function previewProp(row) {
+      if (!row.PicUrl) return
+      app.openLightbox([row.PicUrl], 0, '属性图片')
+    }
+
+    async function replaceProp(row) {
+      await app.gallery.replacePropImage(row._i)
+    }
+
+    return { app, previewProp, replaceProp }
   },
   template: `
     <div class="tscr">
@@ -23,7 +33,6 @@ export default {
         highlight-current-row
         style="width:100%"
         @current-change="row => app.productData.propIndex = row ? row._i : -1"
-        @row-dblclick="() => app.productData.openPropDialog('edit')"
       >
         <el-table-column prop="Name" label="属性名" width="120"></el-table-column>
         <el-table-column prop="Value" label="属性值" width="220" show-overflow-tooltip></el-table-column>
@@ -34,8 +43,21 @@ export default {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="PicUrl" label="图片链接" show-overflow-tooltip></el-table-column>
+        <el-table-column prop="PicUrl" label="图片链接" min-width="220" show-overflow-tooltip></el-table-column>
         <el-table-column prop="Aliasname" label="别名" width="120"></el-table-column>
+        <el-table-column label="图片" width="180" align="center">
+          <template #default="{ row }">
+            <div class="thumb-cell thumb-cell--compact">
+              <div class="thumb-cell__image">
+                <image-proxy :src="row.PicUrl" :alt="row.Value"></image-proxy>
+              </div>
+              <div class="thumb-cell__actions">
+                <el-button size="small" @click="previewProp(row)" :disabled="!row.PicUrl">👁</el-button>
+                <el-button size="small" type="primary" plain @click="replaceProp(row)">换图</el-button>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-dialog v-model="app.ai.propsDialog.show" title="AI 属性补全建议" width="620">
@@ -48,7 +70,7 @@ export default {
                   <el-checkbox v-model="item.checked"></el-checkbox>
                   <div>
                     <div style="font-weight:600">{{ item.Name }}</div>
-                    <div style="color:#606266;margin-top:4px">{{ item.Value }}</div>
+                    <div class="muted" style="margin-top:4px">{{ item.Value }}</div>
                   </div>
                 </div>
               </el-card>

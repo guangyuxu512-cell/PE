@@ -7,6 +7,7 @@ import { useGallery } from './composables/useGallery.js'
 import { useAi } from './composables/useAi.js'
 
 import ImageProxy from './components/shared/ImageProxy.js'
+import ImageLightbox from './components/shared/ImageLightbox.js'
 import LogPanel from './components/shared/LogPanel.js'
 import TabBasicInfo from './components/TabBasicInfo.js'
 import TabPics from './components/TabPics.js'
@@ -27,6 +28,7 @@ const RootApp = {
     const productData = useProductData(logger)
     const gallery = useGallery(config, productData, logger, tab)
     const ai = useAi(config, productData, gallery, logger)
+    const lightbox = reactive({ show: false, images: [], index: 0, title: '' })
 
     async function saveSettings() {
       await config.saveCfg(async () => {
@@ -50,6 +52,30 @@ const RootApp = {
       if (name === 'cos-gallery') await gallery.loadCosGallery(true)
     }
 
+    function openLightbox(images, index = 0, title = '') {
+      const validImages = (images || []).filter(Boolean)
+      if (!validImages.length) return
+      lightbox.images = validImages
+      lightbox.index = Math.min(Math.max(index, 0), validImages.length - 1)
+      lightbox.title = title
+      lightbox.show = true
+    }
+
+    function closeLightbox() {
+      lightbox.show = false
+    }
+
+    function shiftLightbox(step) {
+      if (lightbox.images.length < 2) return
+      const total = lightbox.images.length
+      lightbox.index = (lightbox.index + step + total) % total
+    }
+
+    function scrollTabs(step) {
+      const wrap = document.querySelector('.main-tabs .el-tabs__nav-wrap')
+      if (wrap) wrap.scrollBy({ left: step, behavior: 'smooth' })
+    }
+
     const appState = reactive({
       tab,
       logger,
@@ -57,11 +83,16 @@ const RootApp = {
       productData,
       gallery,
       ai,
+      lightbox,
       COS_REGIONS,
       handleTabChange,
       openGallery,
       openSettings,
       saveSettings,
+      openLightbox,
+      closeLightbox,
+      shiftLightbox,
+      scrollTabs,
     })
 
     provide('appState', appState)
@@ -92,6 +123,14 @@ const RootApp = {
         <el-button @click="openSettings">设置</el-button>
       </header>
 
+      <div class="tabs-toolbar">
+        <div class="tabs-toolbar__hint">标签支持水平滚动，当前窗口较窄时可用左右按钮快速切换。</div>
+        <div class="tabs-toolbar__actions">
+          <el-button @click="scrollTabs(-240)">←</el-button>
+          <el-button @click="scrollTabs(240)">→</el-button>
+        </div>
+      </div>
+
       <el-tabs v-model="tab" class="main-tabs" @tab-change="handleTabChange">
         <el-tab-pane label="基础信息" name="basic"><tab-basic-info></tab-basic-info></el-tab-pane>
         <el-tab-pane label="商品图片" name="pics"><tab-pics></tab-pics></el-tab-pane>
@@ -104,12 +143,12 @@ const RootApp = {
       </el-tabs>
 
       <log-panel></log-panel>
+      <image-lightbox></image-lightbox>
 
       <el-dialog v-model="productData.picDialog.show" :title="productData.picDialog.mode === 'add' ? '新增主图' : '编辑主图'" width="520">
         <el-form label-width="100px">
           <el-form-item label="图片链接"><el-input v-model="productData.picDialog.d.Url"></el-input></el-form-item>
           <el-form-item label="本地路径"><el-input v-model="productData.picDialog.d.LocalPath"></el-input></el-form-item>
-          <el-form-item label="Keys"><el-input v-model="productData.picDialog.d.Keys"></el-input></el-form-item>
           <el-form-item label="图片序号"><el-input v-model="productData.picDialog.d.PicIndex"></el-input></el-form-item>
         </el-form>
         <template #footer>
@@ -180,6 +219,7 @@ const RootApp = {
 const app = createApp(RootApp)
 
 app.component('image-proxy', ImageProxy)
+app.component('image-lightbox', ImageLightbox)
 app.component('log-panel', LogPanel)
 app.component('tab-basic-info', TabBasicInfo)
 app.component('tab-pics', TabPics)

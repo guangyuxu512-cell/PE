@@ -6,6 +6,7 @@ export default {
   setup() {
     const app = inject('appState')
     const picker = reactive({ show: false, selected: [] })
+    const dragState = reactive({ from: -1 })
 
     const pickerItems = computed(() => app.gallery.galleryFilteredList || [])
 
@@ -32,7 +33,37 @@ export default {
       picker.show = false
     }
 
-    return { app, picker, pickerItems, openPicker, insertSelected }
+    function previewDetail(index) {
+      const images = app.productData.detailImages.filter(Boolean)
+      const currentUrl = app.productData.detailImages[index]
+      const currentIndex = images.indexOf(currentUrl)
+      app.openLightbox(images, currentIndex < 0 ? 0 : currentIndex, '商品详情图')
+    }
+
+    async function replaceDetailImage(index) {
+      await app.gallery.replaceDetailImage(index)
+    }
+
+    function onDragStart(index) {
+      dragState.from = index
+    }
+
+    function onDrop(index) {
+      app.productData.reorderDetailImage(dragState.from, index)
+      dragState.from = -1
+    }
+
+    return {
+      app,
+      picker,
+      pickerItems,
+      openPicker,
+      insertSelected,
+      previewDetail,
+      replaceDetailImage,
+      onDragStart,
+      onDrop,
+    }
   },
   template: `
     <div class="tscr">
@@ -47,14 +78,24 @@ export default {
         <el-button type="primary" plain @click="app.productData.addDetailImage('')">添加图片链接</el-button>
         <el-button @click="openPicker">从存储桶选择</el-button>
         <el-button type="primary" @click="app.ai.generateDetail">AI 生成详情</el-button>
+        <span class="muted">支持拖拽排序</span>
       </div>
 
       <div v-if="app.productData.detailMode === 'visual'" class="detail-list">
-        <div v-for="(url, index) in app.productData.detailImages" :key="index" class="detail-item">
+        <div
+          v-for="(url, index) in app.productData.detailImages"
+          :key="index"
+          class="detail-item"
+          draggable="true"
+          @dragstart="onDragStart(index)"
+          @dragover.prevent
+          @drop.prevent="onDrop(index)"
+        >
           <div class="detail-item__preview">
-            <image-proxy :src="url" :alt="'详情图' + (index + 1)"></image-proxy>
+            <image-proxy :src="url" :alt="'详情图 ' + (index + 1)"></image-proxy>
           </div>
           <div>
+            <div class="drag-hint">拖拽排序 · 第 {{ index + 1 }} 张</div>
             <el-input
               type="textarea"
               :rows="4"
@@ -64,6 +105,8 @@ export default {
             ></el-input>
           </div>
           <div class="detail-item__actions">
+            <el-button @click="previewDetail(index)" :disabled="!url">👁 预览</el-button>
+            <el-button type="primary" plain @click="replaceDetailImage(index)">换图</el-button>
             <el-button @click="app.productData.moveDetailImage(index, -1)" :disabled="index === 0">上移</el-button>
             <el-button @click="app.productData.moveDetailImage(index, 1)" :disabled="index === app.productData.detailImages.length - 1">下移</el-button>
             <el-button @click="app.gallery.copyUrl(url)" :disabled="!url">复制 URL</el-button>
@@ -74,7 +117,7 @@ export default {
       </div>
 
       <div v-else style="display:flex;flex-direction:column;height:100%">
-        <p style="margin-bottom:8px;color:#909399;font-size:13px">PC 端商品详情 HTML 源码</p>
+        <p class="muted" style="margin-bottom:8px">PC 端商品详情 HTML 源码</p>
         <textarea class="jbox" :value="app.productData.html" @input="event => app.productData.updateDetailSource(event.target.value)" style="flex:1;min-height:420px"></textarea>
       </div>
 
@@ -84,7 +127,7 @@ export default {
           <el-table-column type="selection" width="48"></el-table-column>
           <el-table-column label="预览" width="90" align="center">
             <template #default="{ row }">
-              <div style="width:52px;height:52px;border-radius:6px;overflow:hidden;margin:0 auto">
+              <div class="table-thumb">
                 <image-proxy :src="row.url" :alt="row.name"></image-proxy>
               </div>
             </template>
@@ -104,7 +147,7 @@ export default {
           <el-space v-else direction="vertical" fill style="width:100%">
             <el-card v-for="(block, index) in app.ai.detailDialog.blocks" :key="index" shadow="never">
               <div style="font-size:16px;font-weight:700;margin-bottom:8px">{{ block.title }}</div>
-              <div style="color:#606266;line-height:1.8;margin-bottom:8px">{{ block.subtitle }}</div>
+              <div class="muted" style="line-height:1.8;margin-bottom:8px">{{ block.subtitle }}</div>
               <el-tag v-for="(item, itemIndex) in block.highlights || []" :key="itemIndex" style="margin:0 8px 8px 0">
                 {{ item }}
               </el-tag>

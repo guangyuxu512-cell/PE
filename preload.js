@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('api', {
   aiDescribeImage: data => ipcRenderer.invoke('ai-describe-image', data),
   aiGenerateDetail: data => ipcRenderer.invoke('ai-generate-detail', data),
   aiOptimizeTitle: data => ipcRenderer.invoke('ai-optimize-title', data),
+  aiOptimizeSkus: data => ipcRenderer.invoke('ai-optimize-skus', data),
+  aiFillSkuCodes: data => ipcRenderer.invoke('ai-fill-sku-codes', data),
   aiFillProps: data => ipcRenderer.invoke('ai-fill-props', data),
   batchExport: data => ipcRenderer.invoke('batch-export', data),
 })

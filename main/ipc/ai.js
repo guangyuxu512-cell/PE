@@ -1,5 +1,5 @@
 // 用途：注册 AI 文本、视觉和详情生成相关 IPC。
-const { chatJson, extractJsonBlock, getAiClient } = require('../utils')
+const { chatJson, getAiClient } = require('../utils')
 
 function getProductSummary(productInfo) {
   const title = productInfo.title || ''
@@ -19,7 +19,7 @@ module.exports = function registerAiIpc({ ipcMain }) {
       temperature: Number(cfg.ai_temperature ?? 0.9),
       max_tokens: Number(cfg.ai_max_tokens ?? 2048),
     })
-    return response.choices[0].message.content.trim()
+    return (response.choices[0].message.content || '').trim()
   })
 
   ipcMain.handle('ai-test', async (_, cfg) => {
@@ -30,7 +30,7 @@ module.exports = function registerAiIpc({ ipcMain }) {
       temperature: Number(cfg.ai_temperature ?? 0.9),
       max_tokens: 32,
     })
-    return response.choices[0].message.content.trim()
+    return (response.choices[0].message.content || '').trim()
   })
 
   ipcMain.handle('ai-describe-image', async (_, { cfg, imageUrl, prompt }) => {
@@ -47,7 +47,7 @@ module.exports = function registerAiIpc({ ipcMain }) {
       temperature: Number(cfg.ai_temperature ?? 0.9),
       max_tokens: Number(cfg.ai_max_tokens ?? 512),
     })
-    return response.choices[0].message.content.trim()
+    return (response.choices[0].message.content || '').trim()
   })
 
   ipcMain.handle('ai-generate-detail', async (_, { cfg, productInfo }) => {
@@ -61,7 +61,7 @@ module.exports = function registerAiIpc({ ipcMain }) {
         role: 'user',
         content:
           '请根据以下商品信息，生成 4 到 8 个详情页图片区块建议。' +
-          '每个区块返回 {"title":"", "subtitle":"", "highlights":["",""]}。\n' +
+          '每个区块返回 {"title":"","subtitle":"","highlights":["",""]}。\n' +
           `商品标题：${summary.title}\n` +
           `类目：${summary.category}\n` +
           `SKU：${summary.skus.join(' / ') || '无'}\n` +
@@ -88,19 +88,53 @@ module.exports = function registerAiIpc({ ipcMain }) {
     ], 'array')
   })
 
-  ipcMain.handle('ai-fill-props', async (_, { cfg, title, category, existingProps }) => {
-    const data = await chatJson(cfg, [
+  ipcMain.handle('ai-optimize-skus', async (_, { cfg, title, category, skus }) => {
+    return chatJson(cfg, [
       {
         role: 'system',
-        content: '你是电商属性补全助手。只返回 JSON 数组，每项为 {"Name":"", "Value":""}。',
+        content: '你是电商 SKU 命名优化助手。只返回 JSON 数组，顺序必须与输入一致，每项为一个中文 SKU 值名称。',
       },
       {
         role: 'user',
         content:
           `商品标题：${title || ''}\n` +
           `类目：${category || ''}\n` +
-          `现有属性：${(existingProps || []).map(item => `${item.Name}:${item.Value}`).join('；') || '无'}\n` +
-          '请补充常见但缺失的商品属性，最多返回 8 条，不要与现有属性重复。',
+          `需要优化的 SKU 值列表：${(skus || []).join(' / ') || '无'}\n` +
+          '请在保持原意的前提下，生成更规范、更有吸引力的 SKU 值名称。只返回 JSON 数组。',
+      },
+    ], 'array')
+  })
+
+  ipcMain.handle('ai-fill-sku-codes', async (_, { cfg, title, category, skus }) => {
+    return chatJson(cfg, [
+      {
+        role: 'system',
+        content: '你是电商 SKU 编码补全助手。只返回 JSON 数组，每项形如 {"SkuCode":"","Barcode":""}，顺序必须与输入一致。',
+      },
+      {
+        role: 'user',
+        content:
+          `商品标题：${title || ''}\n` +
+          `类目：${category || ''}\n` +
+          `SKU 列表：${JSON.stringify(skus || [])}\n` +
+          '请为缺失 SkuCode 或 Barcode 的规格生成建议值。已有值的字段请用空字符串返回。只返回 JSON 数组。',
+      },
+    ], 'array')
+  })
+
+  ipcMain.handle('ai-fill-props', async (_, { cfg, title, category, existingProps }) => {
+    const data = await chatJson(cfg, [
+      {
+        role: 'system',
+        content: '你是电商属性补全助手。只返回 JSON 数组，每项为 {"Name":"","Value":""}。',
+      },
+      {
+        role: 'user',
+        content:
+          `商品标题：${title || ''}\n` +
+          `类目：${category || ''}\n` +
+          `现有非销售属性：${(existingProps || []).map(item => `${item.Name}:${item.Value}`).join('；') || '无'}\n` +
+          '请只补全非销售属性，例如材质、风格、流行元素、功能点等，最多返回 8 条，不要与现有属性重复。',
       },
     ], 'array')
     return data.filter(item => item && item.Name && item.Value)
