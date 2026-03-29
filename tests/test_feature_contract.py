@@ -31,8 +31,16 @@ def test_main_process_supports_title_updates_and_image_proxy_behavior():
     assert "buildNonSalePropKeywords" in ai_js
     assert "原标题：" in ai_js
     assert "核心属性关键词" in ai_js
+    assert "55-60 个中文字符之间" in ai_js
+    assert "尽可能接近 60 字" in ai_js
+    assert "不能少于 55 字" in ai_js
+    assert "不能删除原标题中的任何关键词" in ai_js
+    assert "只能重新排列组合" in ai_js
+    assert "必须补充相关搜索热词" in ai_js
+    assert "不要使用标点符号，纯关键词堆叠" in ai_js
     assert "不要在标题中包含价格、数量、库存" in ai_js
     assert "JSON 数组" in ai_js
+    assert "每个标题控制在 60 字以内" not in ai_js
     assert '{"optimizedTitle":""}' not in ai_js
     assert "buildTitleContext" not in ai_js
     assert "IMAGE_CACHE_LIMIT = 200" in utils_js
