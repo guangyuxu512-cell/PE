@@ -1,4 +1,3 @@
-// 用途：针对外链或防盗链图片提供代理预览组件，并在直连失败时自动回退代理。
 import { COS_HOST_KEYWORDS, PROXY_IMAGE_HOST_KEYWORDS } from '../../constants.js'
 
 const { ref, watch } = Vue
@@ -19,6 +18,10 @@ function shouldProxy(src) {
 function isCosImage(src) {
   const hostname = getHostname(src)
   return hostname.includes('.cos.') || COS_HOST_KEYWORDS.some(keyword => hostname.endsWith(keyword))
+}
+
+function getProxyApiName(src) {
+  return isCosImage(src) ? 'cosProxyImage' : 'proxyImage'
 }
 
 export default {
@@ -51,7 +54,7 @@ export default {
       loading.value = true
       failed.value = false
       try {
-        await loadByProxy(isCosImage(props.src) ? 'cosProxyImage' : 'proxyImage')
+        await loadByProxy(getProxyApiName(props.src))
       } catch {
         currentSrc.value = ''
         failed.value = true

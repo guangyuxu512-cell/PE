@@ -75,11 +75,12 @@ def test_app_and_components_include_required_features():
     assert "AI 生成详情" not in detail_js
     assert "AI 生成标题" in basic_js
     assert "AI 优化标题" in basic_js
-    assert "titleState" in use_ai_js
     assert "generatedTitles" in use_ai_js
-    assert "optimizedTitle" in use_ai_js
-    assert "shortTitle" in product_data_js
+    assert "optimizedTitle" not in use_ai_js
+    assert "originalTitle" not in use_ai_js
+    assert "props: summary.props.filter(item => item.IsSellPro != 1)" in use_ai_js
+    assert "priceRange" not in use_ai_js
+    assert "pics" not in use_ai_js
     assert "priceRange" in product_data_js
-    assert "skuSpecNames" in product_data_js
     assert "AI 补全属性" in props_js
     assert "window.api.proxyImage" in image_proxy_js

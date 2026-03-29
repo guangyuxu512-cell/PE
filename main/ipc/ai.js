@@ -1,27 +1,10 @@
 const { chatJson, getAiClient } = require('../utils')
 
-function buildTitleContext({ category, shortTitle, skuSpecNames, skus, priceRange, props, pics }) {
-  const propText = (props || [])
+function buildNonSalePropKeywords(props) {
+  return (props || [])
+    .filter(item => item && item.IsSellPro != 1 && item.Name && item.Value)
     .map(item => `${item.Name}:${item.Value}`)
     .join('；') || '无'
-  const specNameText = (skuSpecNames || []).join(' / ') || '无'
-  const skuText = (skus || []).join(' / ') || '无'
-  const priceText = priceRange && priceRange.min != null
-    ? priceRange.min === priceRange.max
-      ? `${priceRange.min}`
-      : `${priceRange.min} ~ ${priceRange.max}`
-    : '无'
-  const picText = (pics || []).join('\n') || '无'
-
-  return [
-    `类目：${category || '无'}`,
-    `短标题：${shortTitle || '无'}`,
-    `SKU 规格名：${specNameText}`,
-    `SKU 规格值：${skuText}`,
-    `价格区间：${priceText}`,
-    `商品属性：${propText}`,
-    `主图：${picText}`,
-  ].join('\n')
 }
 
 module.exports = function registerAiIpc({ ipcMain }) {
@@ -64,40 +47,38 @@ module.exports = function registerAiIpc({ ipcMain }) {
     return (response.choices[0].message.content || '').trim()
   })
 
-  ipcMain.handle('ai-generate-title', async (_, { cfg, category, shortTitle, skuSpecNames, skus, priceRange, props, pics }) => {
-    const context = buildTitleContext({ category, shortTitle, skuSpecNames, skus, priceRange, props, pics })
+  ipcMain.handle('ai-generate-title', async (_, { cfg, title, category, props }) => {
+    const keywords = buildNonSalePropKeywords(props)
     return chatJson(cfg, [
       {
         role: 'system',
-        content: '你是电商商品标题生成助手。只返回 JSON 数组，数组内为 3 到 5 个中文标题字符串。',
+        content: '你是电商商品标题生成专家。只返回 JSON 数组，数组内为 3 到 5 个中文标题字符串。',
       },
       {
         role: 'user',
         content:
-          '请根据以下商品信息，生成 5 个适合电商平台的商品标题，每个标题包含核心卖点和搜索关键词，控制在 60 字以内。\n'
-          + `商品信息：\n${context}\n`
-          + '只返回 JSON 数组，不要返回解释。',
+          '请根据以下商品信息，生成 5 个适合电商平台的商品标题，每个标题都要保留核心产品词和卖点关键词，控制在 60 字以内。\n'
+          + `原标题：${title || '无'}\n`
+          + `商品分类：${category || '无'}\n`
+          + `核心属性关键词：${keywords}\n`
+          + '不要在标题中包含价格、数量、库存、“X元起”等信息。只返回 JSON 数组，不要返回解释。',
       },
     ], 'array')
   })
 
-  ipcMain.handle('ai-optimize-title', async (_, { cfg, title, category, shortTitle, skuSpecNames, skus, priceRange, props }) => {
-    const context = buildTitleContext({ category, shortTitle, skuSpecNames, skus, priceRange, props, pics: [] })
-    const data = await chatJson(cfg, [
+  ipcMain.handle('ai-optimize-title', async (_, { cfg, title }) => {
+    return chatJson(cfg, [
       {
         role: 'system',
-        content: '你是电商标题优化助手。只返回 JSON 对象，格式为 {"optimizedTitle":""}。',
+        content: '你是电商标题优化专家。只返回 JSON 数组，数组内为 5 个中文标题字符串。',
       },
       {
         role: 'user',
         content:
-          '请基于以下原标题和商品信息，优化这个标题使其更适合电商搜索，保留核心卖点，控制在 60 字以内。\n'
-          + `原标题：${title || ''}\n`
-          + `商品信息：\n${context}\n`
-          + '只返回 JSON 对象。',
+          '请根据以下原始标题，生成 5 个优化版本。要求：保留核心产品词和卖点关键词，优化关键词排列顺序使其更利于搜索，去掉冗余词，不要包含价格和数量信息，每个标题控制在 60 字以内。'
+          + `原始标题：${title || ''}`,
       },
-    ], 'object')
-    return (data && data.optimizedTitle ? String(data.optimizedTitle) : '').trim()
+    ], 'array')
   })
 
   ipcMain.handle('ai-optimize-skus', async (_, { cfg, title, category, skus }) => {

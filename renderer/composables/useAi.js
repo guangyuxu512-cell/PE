@@ -6,8 +6,6 @@ export function useAi(configState, productData, galleryState, logger) {
     loading: false,
     mode: '',
     generatedTitles: [],
-    optimizedTitle: '',
-    originalTitle: '',
   })
   const propsDialog = reactive({ show: false, loading: false, suggestions: [] })
   const skuNameDialog = reactive({ show: false, loading: false, suggestions: [] })
@@ -24,8 +22,6 @@ export function useAi(configState, productData, galleryState, logger) {
   function resetTitleState(mode = '') {
     titleState.mode = mode
     titleState.generatedTitles = []
-    titleState.optimizedTitle = ''
-    titleState.originalTitle = ''
   }
 
   async function pickBatchDir() {
@@ -109,13 +105,8 @@ export function useAi(configState, productData, galleryState, logger) {
     return {
       cfg: configState.cfgPayload(),
       title: summary.title,
-      shortTitle: summary.shortTitle,
       category: summary.category,
-      skus: summary.skus,
-      skuSpecNames: summary.skuSpecNames,
-      priceRange: summary.priceRange,
-      props: summary.props,
-      pics: summary.pics,
+      props: summary.props.filter(item => item.IsSellPro != 1),
     }
   }
 
@@ -150,11 +141,14 @@ export function useAi(configState, productData, galleryState, logger) {
 
     resetTitleState('optimize')
     titleState.loading = true
-    titleState.originalTitle = payload.title
 
     try {
-      titleState.optimizedTitle = await window.api.aiOptimizeTitle(payload)
-      logger.log('AI 优化标题已返回结果')
+      const suggestions = await window.api.aiOptimizeTitle({
+        cfg: payload.cfg,
+        title: payload.title,
+      })
+      titleState.generatedTitles = (suggestions || []).slice(0, 5)
+      logger.log('AI 优化标题已返回 ' + titleState.generatedTitles.length + ' 个候选项')
     } catch (err) {
       resetTitleState()
       logger.log('AI 优化标题失败：' + err.message)

@@ -63,8 +63,9 @@ def test_main_process_modules_expose_required_handlers_and_helpers():
         assert f"ipcMain.handle('{channel}'" in ai_js
 
     assert "ai-generate-detail" not in ai_js
-    assert "buildTitleContext" in ai_js
-    assert '{"optimizedTitle":""}' in ai_js
+    assert "buildTitleContext" not in ai_js
+    assert "buildNonSalePropKeywords" in ai_js
+    assert '{"optimizedTitle":""}' not in ai_js
 
     for api_name in [
         "proxyImage",

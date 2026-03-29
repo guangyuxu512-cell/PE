@@ -22,25 +22,8 @@ export default {
                       <el-button @click="app.ai.optimizeTitle" :loading="app.ai.titleState.loading && app.ai.titleState.mode === 'optimize'">AI 优化标题</el-button>
                     </div>
 
-                    <div v-if="app.ai.titleState.mode === 'optimize' && app.ai.titleState.optimizedTitle" class="title-ai-panel">
-                      <div class="title-ai-panel__title">优化结果</div>
-                      <div class="title-ai-compare">
-                        <div class="title-ai-compare__item">
-                          <div class="title-ai-compare__label">原标题</div>
-                          <div>{{ app.ai.titleState.originalTitle }}</div>
-                        </div>
-                        <div class="title-ai-compare__item">
-                          <div class="title-ai-compare__label">优化后标题</div>
-                          <div>{{ app.ai.titleState.optimizedTitle }}</div>
-                        </div>
-                      </div>
-                      <div class="title-ai-actions">
-                        <el-button type="primary" @click="app.ai.applyTitleSuggestion(app.ai.titleState.optimizedTitle)">采用</el-button>
-                      </div>
-                    </div>
-
-                    <div v-if="app.ai.titleState.mode === 'generate' && app.ai.titleState.generatedTitles.length" class="title-ai-panel">
-                      <div class="title-ai-panel__title">候选标题</div>
+                    <div v-if="app.ai.titleState.generatedTitles.length" class="title-ai-panel">
+                      <div class="title-ai-panel__title">{{ app.ai.titleState.mode === 'optimize' ? '优化结果' : '候选标题' }}</div>
                       <div class="title-ai-list">
                         <div v-for="(item, index) in app.ai.titleState.generatedTitles" :key="index" class="title-ai-list__item">
                           <div class="title-ai-list__text">{{ item }}</div>
