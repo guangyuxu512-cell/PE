@@ -1,4 +1,3 @@
-// 用途：渲染商品详情双模式编辑 Tab，支持图片列表、源代码、COS 选择和 AI 生成。
 const { inject, reactive, computed } = Vue
 
 export default {
@@ -77,7 +76,6 @@ export default {
       <div class="bb" v-if="app.productData.detailMode === 'visual'">
         <el-button type="primary" plain @click="app.productData.addDetailImage('')">添加图片链接</el-button>
         <el-button @click="openPicker">从存储桶选择</el-button>
-        <el-button type="primary" @click="app.ai.generateDetail">AI 生成详情</el-button>
         <span class="muted">支持拖拽排序</span>
       </div>
 
@@ -92,7 +90,7 @@ export default {
           @drop.prevent="onDrop(index)"
         >
           <div class="detail-item__preview">
-            <image-proxy :src="url" :alt="'详情图 ' + (index + 1)"></image-proxy>
+            <image-proxy :src="url" :alt="'详情图' + (index + 1)"></image-proxy>
           </div>
           <div>
             <div class="drag-hint">拖拽排序 · 第 {{ index + 1 }} 张</div>
@@ -105,7 +103,7 @@ export default {
             ></el-input>
           </div>
           <div class="detail-item__actions">
-            <el-button @click="previewDetail(index)" :disabled="!url">👁 预览</el-button>
+            <el-button @click="previewDetail(index)" :disabled="!url">预览</el-button>
             <el-button type="primary" plain @click="replaceDetailImage(index)">换图</el-button>
             <el-button @click="app.productData.moveDetailImage(index, -1)" :disabled="index === 0">上移</el-button>
             <el-button @click="app.productData.moveDetailImage(index, 1)" :disabled="index === app.productData.detailImages.length - 1">下移</el-button>
@@ -138,25 +136,6 @@ export default {
         <template #footer>
           <el-button @click="picker.show = false">取消</el-button>
           <el-button type="primary" @click="insertSelected">插入详情</el-button>
-        </template>
-      </el-dialog>
-
-      <el-dialog v-model="app.ai.detailDialog.show" title="AI 详情建议" width="760">
-        <div v-loading="app.ai.detailDialog.loading">
-          <el-empty v-if="!app.ai.detailDialog.loading && !app.ai.detailDialog.blocks.length" description="暂无详情建议"></el-empty>
-          <el-space v-else direction="vertical" fill style="width:100%">
-            <el-card v-for="(block, index) in app.ai.detailDialog.blocks" :key="index" shadow="never">
-              <div style="font-size:16px;font-weight:700;margin-bottom:8px">{{ block.title }}</div>
-              <div class="muted" style="line-height:1.8;margin-bottom:8px">{{ block.subtitle }}</div>
-              <el-tag v-for="(item, itemIndex) in block.highlights || []" :key="itemIndex" style="margin:0 8px 8px 0">
-                {{ item }}
-              </el-tag>
-            </el-card>
-          </el-space>
-        </div>
-        <template #footer>
-          <el-button @click="app.ai.detailDialog.show = false">取消</el-button>
-          <el-button type="primary" @click="app.ai.applyDetailBlocks">生成详情 HTML</el-button>
         </template>
       </el-dialog>
     </div>

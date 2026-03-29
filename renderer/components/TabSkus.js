@@ -1,4 +1,3 @@
-// 用途：渲染 SKU 管理 Tab。
 const { inject } = Vue
 
 export default {
@@ -25,7 +24,6 @@ export default {
         <el-button :disabled="app.productData.skuIndex < 0" @click="app.productData.openSkuDialog('edit')">编辑</el-button>
         <el-button :disabled="app.productData.skuIndex < 0" type="danger" plain @click="app.productData.deleteSku">删除</el-button>
         <el-divider direction="vertical"></el-divider>
-        <el-button type="primary" @click="app.ai.optimizeTitle">AI 生成标题</el-button>
         <el-button :disabled="!app.productData.selectedSkuIndexes.length" @click="app.ai.optimizeSkuNames">AI 优化 SKU 名称</el-button>
         <el-button @click="app.ai.fillSkuCodes">AI 批量补全</el-button>
       </div>
@@ -48,7 +46,7 @@ export default {
                 <image-proxy :src="row.imageUrl" :alt="row.sv"></image-proxy>
               </div>
               <div class="thumb-cell__actions">
-                <el-button size="small" @click="previewSku(row)" :disabled="!row.imageUrl">👁 预览</el-button>
+                <el-button size="small" @click="previewSku(row)" :disabled="!row.imageUrl">预览</el-button>
                 <el-button size="small" type="primary" plain @click="replaceSku(row)">换图</el-button>
               </div>
             </div>
@@ -62,20 +60,6 @@ export default {
         <el-table-column prop="SkuCode" label="编码" width="120" show-overflow-tooltip></el-table-column>
         <el-table-column prop="Barcode" label="条码" width="120" show-overflow-tooltip></el-table-column>
       </el-table>
-
-      <el-dialog v-model="app.ai.titleDialog.show" title="AI 标题优化建议" width="560">
-        <div v-loading="app.ai.titleDialog.loading">
-          <el-empty v-if="!app.ai.titleDialog.loading && !app.ai.titleDialog.suggestions.length" description="暂无标题建议"></el-empty>
-          <el-space direction="vertical" fill style="width:100%" v-else>
-            <el-card v-for="(item, index) in app.ai.titleDialog.suggestions" :key="index" shadow="never">
-              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
-                <div style="line-height:1.8">{{ item }}</div>
-                <el-button type="primary" @click="app.ai.applyTitleSuggestion(item)">应用</el-button>
-              </div>
-            </el-card>
-          </el-space>
-        </div>
-      </el-dialog>
 
       <el-dialog v-model="app.ai.skuNameDialog.show" title="AI SKU 名称建议" width="620">
         <div v-loading="app.ai.skuNameDialog.loading">

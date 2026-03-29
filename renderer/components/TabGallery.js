@@ -1,11 +1,17 @@
-// 用途：渲染存储桶图片管理 Tab。
 const { inject } = Vue
 
 export default {
   name: 'TabGallery',
   setup() {
     const app = inject('appState')
-    return { app }
+
+    function previewGalleryItem(item) {
+      const images = app.gallery.galleryFilteredList.map(row => row.url).filter(Boolean)
+      const index = images.indexOf(item.url)
+      app.openLightbox(images, index < 0 ? 0 : index, '存储桶图片')
+    }
+
+    return { app, previewGalleryItem }
   },
   template: `
     <div class="tscr">
@@ -33,7 +39,7 @@ export default {
 
         <div v-loading="app.gallery.gallery.loading" v-else-if="app.gallery.gallery.view === 'grid'" class="gallery-grid">
           <div v-for="item in app.gallery.galleryFilteredList" :key="item.key" class="gallery-card">
-            <div class="gallery-card__image" @click="app.gallery.openPreview(item)">
+            <div class="gallery-card__image" @click="previewGalleryItem(item)">
               <image-proxy :src="item.url" :alt="item.name"></image-proxy>
             </div>
             <div class="gallery-card__body">
@@ -61,7 +67,7 @@ export default {
           stripe
           row-key="key"
           @selection-change="app.gallery.onGalleryTableSelection"
-          @row-dblclick="app.gallery.openPreview"
+          @row-dblclick="previewGalleryItem"
         >
           <el-table-column type="selection" width="48" reserve-selection></el-table-column>
           <el-table-column label="缩略图" width="90" align="center">
@@ -90,10 +96,6 @@ export default {
             </template>
           </el-table-column>
         </el-table>
-
-        <el-dialog v-model="app.gallery.gallery.preview.show" :title="app.gallery.gallery.preview.name || '图片预览'" width="880" class="preview-dialog">
-          <image-proxy :src="app.gallery.gallery.preview.url" :alt="app.gallery.gallery.preview.name"></image-proxy>
-        </el-dialog>
       </div>
 
       <div v-else class="gallery-empty">

@@ -100,8 +100,8 @@ function fetchImageWithProxy(url, depth = 0) {
     const client = parsed.protocol === 'http:' ? http : https
     const req = client.get(url, {
       headers: {
-        Referer: `${parsed.protocol}//${parsed.host}/`,
-        'User-Agent': 'Mozilla/5.0 Electron Product Editor',
+        Referer: 'https://detail.1688.com/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       },
       timeout: 10000,
     }, res => {

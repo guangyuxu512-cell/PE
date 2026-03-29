@@ -36,6 +36,11 @@ function getSkuSpec(sku) {
   return (sku?.Specs || [])[0] || { SpecName: '', SpecValue: '' }
 }
 
+function normalizePrice(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
 export function useProductData(logger) {
   const D = ref(null)
   const info = reactive({})
@@ -307,10 +312,25 @@ export function useProductData(logger) {
 
   function getProductSummary() {
     fromUi()
+    const skuRows = skuList.value
+    const numericPrices = skuRows
+      .map(item => normalizePrice(item.PromotionPrice ?? item.Price))
+      .filter(value => value != null)
+    const fallbackPrice = normalizePrice((D.value?.FromItem || {}).PromotionPrice ?? (D.value?.FromItem || {}).ItemPrice)
+    if (fallbackPrice != null) numericPrices.push(fallbackPrice)
+    const minPrice = numericPrices.length ? Math.min(...numericPrices) : null
+    const maxPrice = numericPrices.length ? Math.max(...numericPrices) : null
+
     return {
       title: (D.value?.FromItem || {}).ItemName || '',
+      shortTitle: (D.value?.FromItem || {}).ShortTitle || '',
       category: (D.value?.FromItem || {}).SortName || '',
-      skus: skuList.value.map(item => item.sv).filter(Boolean),
+      skus: skuRows.map(item => item.sv).filter(Boolean),
+      skuSpecNames: [...new Set(skuRows.map(item => item.sn).filter(Boolean))],
+      priceRange: {
+        min: minPrice,
+        max: maxPrice,
+      },
       props: (D.value?.FromProperties || []).map(item => ({ Name: item.Name, Value: item.Value, IsSellPro: item.IsSellPro })),
       pics: (D.value?.FromPics || []).map(item => item.Url).filter(Boolean),
     }

@@ -1,4 +1,3 @@
-// 用途：向渲染进程暴露受控的 Electron IPC 能力。
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
@@ -18,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   aiGen: data => ipcRenderer.invoke('ai-gen', data),
   aiTest: cfg => ipcRenderer.invoke('ai-test', cfg),
   aiDescribeImage: data => ipcRenderer.invoke('ai-describe-image', data),
-  aiGenerateDetail: data => ipcRenderer.invoke('ai-generate-detail', data),
+  aiGenerateTitle: data => ipcRenderer.invoke('ai-generate-title', data),
   aiOptimizeTitle: data => ipcRenderer.invoke('ai-optimize-title', data),
   aiOptimizeSkus: data => ipcRenderer.invoke('ai-optimize-skus', data),
   aiFillSkuCodes: data => ipcRenderer.invoke('ai-fill-sku-codes', data),

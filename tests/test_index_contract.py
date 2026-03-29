@@ -47,6 +47,8 @@ def test_app_and_components_include_required_features():
     app_js = read("renderer/app.js")
     detail_js = read("renderer/components/TabDetail.js")
     basic_js = read("renderer/components/TabBasicInfo.js")
+    use_ai_js = read("renderer/composables/useAi.js")
+    product_data_js = read("renderer/composables/useProductData.js")
     props_js = read("renderer/components/TabProps.js")
     image_proxy_js = read("renderer/components/shared/ImageProxy.js")
 
@@ -65,12 +67,19 @@ def test_app_and_components_include_required_features():
         "图片列表模式",
         "HTML 源码模式",
         "从存储桶选择",
-        "AI 生成详情",
         "updateDetailSource",
-        "applyDetailBlocks",
+        "replaceDetailImage",
     ]:
         assert marker in detail_js
 
-    assert "AI 优化" in basic_js
+    assert "AI 生成详情" not in detail_js
+    assert "AI 生成标题" in basic_js
+    assert "AI 优化标题" in basic_js
+    assert "titleState" in use_ai_js
+    assert "generatedTitles" in use_ai_js
+    assert "optimizedTitle" in use_ai_js
+    assert "shortTitle" in product_data_js
+    assert "priceRange" in product_data_js
+    assert "skuSpecNames" in product_data_js
     assert "AI 补全属性" in props_js
     assert "window.api.proxyImage" in image_proxy_js

@@ -1,11 +1,15 @@
-// 用途：封装 AI 批量生成、标题优化、SKU 增强、属性补全和详情生成能力。
 const { reactive } = Vue
 
 export function useAi(configState, productData, galleryState, logger) {
   const batchDialog = reactive({ show: false, n: 10, dir: '', busy: false })
-  const titleDialog = reactive({ show: false, loading: false, suggestions: [] })
+  const titleState = reactive({
+    loading: false,
+    mode: '',
+    generatedTitles: [],
+    optimizedTitle: '',
+    originalTitle: '',
+  })
   const propsDialog = reactive({ show: false, loading: false, suggestions: [] })
-  const detailDialog = reactive({ show: false, loading: false, blocks: [] })
   const skuNameDialog = reactive({ show: false, loading: false, suggestions: [] })
   const skuCodeDialog = reactive({ show: false, loading: false, suggestions: [] })
 
@@ -15,6 +19,13 @@ export function useAi(configState, productData, galleryState, logger) {
       return false
     }
     return true
+  }
+
+  function resetTitleState(mode = '') {
+    titleState.mode = mode
+    titleState.generatedTitles = []
+    titleState.optimizedTitle = ''
+    titleState.originalTitle = ''
   }
 
   async function pickBatchDir() {
@@ -36,7 +47,10 @@ export function useAi(configState, productData, galleryState, logger) {
       return
     }
 
-    const skus = (productData.D.value.FromSkus || []).map(item => ((item.Specs || [])[0] || {}).SpecValue || '').filter(Boolean)
+    const skus = (productData.D.value.FromSkus || [])
+      .map(item => ((item.Specs || [])[0] || {}).SpecValue || '')
+      .filter(Boolean)
+
     batchDialog.busy = true
     logger.log('正在调用 AI 生成 ' + batchDialog.n + ' 套商品数据')
 
@@ -79,7 +93,7 @@ export function useAi(configState, productData, galleryState, logger) {
       })
 
       const count = await window.api.batchExport({ dir: batchDialog.dir, files })
-      logger.log('AI 批量生成完成：' + count + ' 套已导出到 ' + batchDialog.dir)
+      logger.log('AI 批量生成完成，' + count + ' 套已导出到 ' + batchDialog.dir)
       ElementPlus.ElMessage.success('已生成 ' + count + ' 套商品数据')
       batchDialog.show = false
     } catch (err) {
@@ -90,32 +104,69 @@ export function useAi(configState, productData, galleryState, logger) {
     batchDialog.busy = false
   }
 
+  function getTitleRequestPayload() {
+    const summary = productData.getProductSummary()
+    return {
+      cfg: configState.cfgPayload(),
+      title: summary.title,
+      shortTitle: summary.shortTitle,
+      category: summary.category,
+      skus: summary.skus,
+      skuSpecNames: summary.skuSpecNames,
+      priceRange: summary.priceRange,
+      props: summary.props,
+      pics: summary.pics,
+    }
+  }
+
+  async function generateTitle() {
+    if (!productData.D.value) return
+    if (!requireAiReady()) return
+
+    resetTitleState('generate')
+    titleState.loading = true
+
+    try {
+      const suggestions = await window.api.aiGenerateTitle(getTitleRequestPayload())
+      titleState.generatedTitles = (suggestions || []).slice(0, 5)
+      logger.log('AI 生成标题已返回 ' + titleState.generatedTitles.length + ' 个候选项')
+    } catch (err) {
+      resetTitleState()
+      logger.log('AI 生成标题失败：' + err.message)
+      ElementPlus.ElMessage.error('AI 生成标题失败：' + err.message)
+    }
+
+    titleState.loading = false
+  }
+
   async function optimizeTitle() {
     if (!productData.D.value) return
     if (!requireAiReady()) return
-    titleDialog.loading = true
-    titleDialog.show = true
-    try {
-      const summary = productData.getProductSummary()
-      const suggestions = await window.api.aiOptimizeTitle({
-        cfg: configState.cfgPayload(),
-        title: summary.title,
-        category: summary.category,
-        skus: summary.skus,
-      })
-      titleDialog.suggestions = suggestions.slice(0, 3)
-      logger.log('已生成 ' + titleDialog.suggestions.length + ' 条标题优化建议')
-    } catch (err) {
-      ElementPlus.ElMessage.error('标题优化失败：' + err.message)
-      logger.log('标题优化失败：' + err.message)
-      titleDialog.show = false
+    const payload = getTitleRequestPayload()
+    if (!payload.title) {
+      ElementPlus.ElMessage.warning('请先填写当前标题，再执行 AI 优化标题')
+      return
     }
-    titleDialog.loading = false
+
+    resetTitleState('optimize')
+    titleState.loading = true
+    titleState.originalTitle = payload.title
+
+    try {
+      titleState.optimizedTitle = await window.api.aiOptimizeTitle(payload)
+      logger.log('AI 优化标题已返回结果')
+    } catch (err) {
+      resetTitleState()
+      logger.log('AI 优化标题失败：' + err.message)
+      ElementPlus.ElMessage.error('AI 优化标题失败：' + err.message)
+    }
+
+    titleState.loading = false
   }
 
   function applyTitleSuggestion(title) {
     productData.setTitle(title)
-    titleDialog.show = false
+    resetTitleState()
     logger.log('已应用 AI 标题建议')
   }
 
@@ -146,9 +197,9 @@ export function useAi(configState, productData, galleryState, logger) {
       }))
       logger.log('已生成 ' + skuNameDialog.suggestions.length + ' 条 SKU 名称建议')
     } catch (err) {
-      ElementPlus.ElMessage.error('SKU 名称优化失败：' + err.message)
-      logger.log('SKU 名称优化失败：' + err.message)
       skuNameDialog.show = false
+      logger.log('SKU 名称优化失败：' + err.message)
+      ElementPlus.ElMessage.error('SKU 名称优化失败：' + err.message)
     }
     skuNameDialog.loading = false
   }
@@ -198,9 +249,9 @@ export function useAi(configState, productData, galleryState, logger) {
       }))
       logger.log('已生成 ' + skuCodeDialog.suggestions.length + ' 条 SKU 编码建议')
     } catch (err) {
-      ElementPlus.ElMessage.error('SKU 编码补全失败：' + err.message)
-      logger.log('SKU 编码补全失败：' + err.message)
       skuCodeDialog.show = false
+      logger.log('SKU 编码补全失败：' + err.message)
+      ElementPlus.ElMessage.error('SKU 编码补全失败：' + err.message)
     }
     skuCodeDialog.loading = false
   }
@@ -233,9 +284,9 @@ export function useAi(configState, productData, galleryState, logger) {
       propsDialog.suggestions = suggestions.map(item => ({ ...item, checked: true }))
       logger.log('已生成 ' + propsDialog.suggestions.length + ' 条属性建议')
     } catch (err) {
-      ElementPlus.ElMessage.error('属性补全失败：' + err.message)
-      logger.log('属性补全失败：' + err.message)
       propsDialog.show = false
+      logger.log('属性补全失败：' + err.message)
+      ElementPlus.ElMessage.error('属性补全失败：' + err.message)
     }
     propsDialog.loading = false
   }
@@ -252,47 +303,15 @@ export function useAi(configState, productData, galleryState, logger) {
     ElementPlus.ElMessage.success('已添加 ' + count + ' 条属性')
   }
 
-  async function generateDetail() {
-    if (!productData.D.value) return
-    if (!requireAiReady()) return
-    detailDialog.loading = true
-    detailDialog.show = true
-    try {
-      const summary = productData.getProductSummary()
-      const blocks = await window.api.aiGenerateDetail({
-        cfg: configState.cfgPayload(),
-        productInfo: summary,
-      })
-      detailDialog.blocks = blocks
-      logger.log('已生成 ' + blocks.length + ' 个详情区块建议')
-    } catch (err) {
-      ElementPlus.ElMessage.error('详情生成失败：' + err.message)
-      logger.log('详情生成失败：' + err.message)
-      detailDialog.show = false
-    }
-    detailDialog.loading = false
-  }
-
-  function applyDetailBlocks() {
-    if (!detailDialog.blocks.length) {
-      ElementPlus.ElMessage.warning('当前没有可应用的详情建议')
-      return
-    }
-    productData.applyDetailSections(detailDialog.blocks)
-    detailDialog.show = false
-    logger.log('已应用 AI 详情建议')
-    ElementPlus.ElMessage.success('详情已生成')
-  }
-
   return {
     batchDialog,
-    titleDialog,
+    titleState,
     propsDialog,
-    detailDialog,
     skuNameDialog,
     skuCodeDialog,
     pickBatchDir,
     runBatchGenerate,
+    generateTitle,
     optimizeTitle,
     applyTitleSuggestion,
     optimizeSkuNames,
@@ -301,7 +320,5 @@ export function useAi(configState, productData, galleryState, logger) {
     applySkuCodeSuggestions,
     fillProps,
     applyCheckedProps,
-    generateDetail,
-    applyDetailBlocks,
   }
 }

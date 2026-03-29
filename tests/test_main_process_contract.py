@@ -50,18 +50,33 @@ def test_main_process_modules_expose_required_handlers_and_helpers():
     for channel in ["cos-upload", "cos-list", "cos-test", "cos-delete", "proxy-image", "cos-proxy-image"]:
         assert f"ipcMain.handle('{channel}'" in cos_js
 
-    for channel in ["ai-gen", "ai-test", "ai-describe-image", "ai-generate-detail", "ai-optimize-title", "ai-fill-props"]:
+    for channel in [
+        "ai-gen",
+        "ai-test",
+        "ai-describe-image",
+        "ai-generate-title",
+        "ai-optimize-title",
+        "ai-fill-props",
+        "ai-optimize-skus",
+        "ai-fill-sku-codes",
+    ]:
         assert f"ipcMain.handle('{channel}'" in ai_js
+
+    assert "ai-generate-detail" not in ai_js
+    assert "buildTitleContext" in ai_js
+    assert '{"optimizedTitle":""}' in ai_js
 
     for api_name in [
         "proxyImage",
         "cosProxyImage",
         "aiDescribeImage",
-        "aiGenerateDetail",
+        "aiGenerateTitle",
         "aiOptimizeTitle",
         "aiFillProps",
     ]:
         assert f"{api_name}:" in preload_js
+
+    assert "aiGenerateDetail" not in preload_js
 
 
 def test_node_can_parse_commonjs_entry_files():
